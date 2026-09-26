@@ -177,7 +177,8 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
   </section>
 
   <div class="footer">Quarter-hour boundaries: :00 · :15 · :30 · :45. Locked forecasts do not change during an active window.</div>
-<div id="tightThreshold" style="display:none">—</div><div id="tightCoverage" style="display:none">—</div>\n</main>
+<div id="tightThreshold" style="display:none">—</div><div id="tightCoverage" style="display:none">—</div>
+</main>
 
 <script>
 (() => {
@@ -857,7 +858,9 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
     ui.mTrain.textContent = model.trainCount.toLocaleString();
     ui.mVerify.textContent = model.verifyCount.toLocaleString();
     ui.mAccuracy.textContent = fmtPct(model.tightAccuracy);
-    ui.mBrier.textContent = Number.isFinite(model.brier) ? model.brier.toFixed(3) : "—";\n    document.getElementById("tightThreshold").textContent = fmtPct(model.tightThreshold);\n    document.getElementById("tightCoverage").textContent = fmtPct(model.tightCoverage);
+    ui.mBrier.textContent = Number.isFinite(model.brier) ? model.brier.toFixed(3) : "—";
+    document.getElementById("tightThreshold").textContent = fmtPct(model.tightThreshold);
+    document.getElementById("tightCoverage").textContent = fmtPct(model.tightCoverage);
     ui.mCoeffs.textContent = Array.isArray(model.coefficients) ? "Score + UTC clock · " + model.coefficients.length + " β" : "—";
     ui.mBaseAccuracy.textContent = fmtPct(model.baselineAccuracy);
     ui.mBaseBrier.textContent = Number.isFinite(model.baselineBrier) ? model.baselineBrier.toFixed(3) : "—";
