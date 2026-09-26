@@ -157,9 +157,9 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
     </div>
     <div class="dashboard">
       <div class="metric"><div class="label">Historical windows</div><div class="v" id="mTotal">—</div></div>
-      <div class="metric"><div class="label">60% training</div><div class="v" id="mTrain">—</div></div>
-      <div class="metric"><div class="label">20% untouched test</div><div class="v" id="mVerify">—</div></div>
-      <div class="metric"><div class="label">Tight OOS accuracy</div><div class="v" id="mAccuracy">—</div></div>
+      <div class="metric"><div class="label">70% calibration</div><div class="v" id="mTrain">—</div></div>
+      <div class="metric"><div class="label">30% verification</div><div class="v" id="mVerify">—</div></div>
+      <div class="metric"><div class="label">OOS directional accuracy</div><div class="v" id="mAccuracy">—</div></div>
       <div class="metric"><div class="label">OOS Brier score</div><div class="v" id="mBrier">—</div></div>
       <div class="metric"><div class="label">Probability model</div><div class="v" id="mCoeffs">—</div></div>
       <div class="metric"><div class="label">Score-only OOS accuracy</div><div class="v" id="mBaseAccuracy">—</div></div>
@@ -168,7 +168,7 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
       <div class="metric wide"><div class="label">Calibration date range</div><div class="v" id="mTrainRange">—</div></div>
       <div class="metric wide"><div class="label">Verification date range</div><div class="v" id="mVerifyRange">—</div></div>
     </div>
-    <p class="explain">The model trains on the oldest 60% of DOGE/USD history, uses the next 20% to learn the Tight Mode cutoff, and verifies on the newest untouched 20%. Probability now uses the technical score plus cyclical UTC time-of-day and day-of-week features. Expected movement is also conditioned on score and UTC hour when enough training observations exist. The score-only OOS benchmark remains visible so you can see whether the added clock features actually helped. Forecasts are statistical estimates, not guarantees.</p>
+    <p class="explain">The model is calibrated on older DOGE/USD history and verified on the most recent 30% of the historical sample. Probability now uses the technical score plus cyclical UTC time-of-day and day-of-week features. Expected movement is also conditioned on score and UTC hour when enough training observations exist. The score-only OOS benchmark remains visible so you can see whether the added clock features actually helped. Forecasts are statistical estimates, not guarantees.</p>
   </section>
 
   <section class="card section">
@@ -177,7 +177,6 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
   </section>
 
   <div class="footer">Quarter-hour boundaries: :00 · :15 · :30 · :45. Locked forecasts do not change during an active window.</div>
-<div id="tightThreshold" style="display:none">—</div><div id="tightCoverage" style="display:none">—</div>
 </main>
 
 <script>
@@ -717,39 +716,6 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
     };
   }
 
-  function thresholdStats(samples, coefficients, threshold) {
-    let qualified = 0, correct = 0;
-    for (const s of samples) {
-      const p = probabilityFor(s, coefficients, true);
-      const confidence = p >= 0.5 ? p : 1 - p;
-      if (confidence + 1e-12 < threshold) continue;
-      qualified++;
-      if ((p >= 0.5 ? 1 : 0) === s.y) correct++;
-    }
-    const accuracy = qualified ? correct / qualified : NaN;
-    const coverage = samples.length ? qualified / samples.length : 0;
-    const lower = qualified && Number.isFinite(accuracy)
-      ? accuracy - 1.96 * Math.sqrt(Math.max(0, accuracy * (1 - accuracy) / qualified))
-      : -Infinity;
-    return {threshold,count:qualified,accuracy,coverage,lower};
-  }
-
-  function chooseTightThreshold(validation, coefficients) {
-    const minCount = Math.max(100, Math.ceil(validation.length * 0.20));
-    let best = null;
-    for (let step = 0; step <= 60; step++) {
-      const threshold = 0.50 + step * 0.005;
-      const s = thresholdStats(validation, coefficients, threshold);
-      if (s.count < minCount) continue;
-      if (!best || s.lower > best.lower + 1e-9 ||
-          (Math.abs(s.lower - best.lower) <= 1e-9 && s.accuracy > best.accuracy + 1e-9) ||
-          (Math.abs(s.lower - best.lower) <= 1e-9 && Math.abs(s.accuracy - best.accuracy) <= 1e-9 && s.coverage > best.coverage)) {
-        best = s;
-      }
-    }
-    return best || thresholdStats(validation, coefficients, 0.50);
-  }
-
   function buildHourlyOOSStats(verify, coefficients) {
     const buckets = {};
     for (let hour = 0; hour < 24; hour++) buckets[hour] = {n:0, correct:0, brierSum:0, moves:[]};
@@ -778,25 +744,21 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
 
   function calibrate(samples, sourceFetchedAt) {
     if (samples.length < 1000) throw new Error("Not enough historical forecasting samples to calibrate.");
-    const trainEnd = Math.floor(samples.length * 0.60);
-    const validationEnd = Math.floor(samples.length * 0.80);
-    const train = samples.slice(0, trainEnd);
-    const validation = samples.slice(trainEnd, validationEnd);
-    const verify = samples.slice(validationEnd);
+    const split = Math.floor(samples.length * 0.70);
+    const train = samples.slice(0, split);
+    const verify = samples.slice(split);
 
     const coefficients = fitLogistic(train, true);
     const baselineCoefficients = fitLogistic(train, false);
     const oos = evaluateOOS(verify, coefficients, true);
     const baselineOos = evaluateOOS(verify, baselineCoefficients, false);
-    const tight = chooseTightThreshold(validation, coefficients);
-    const tightTest = thresholdStats(verify, coefficients, tight.threshold);
 
     const expectedMoveByScore = buildExpectedMoveTable(train);
     const expectedMoveByScoreHour = buildExpectedMoveByScoreHour(train, expectedMoveByScore);
     const hourlyOOS = buildHourlyOOSStats(verify, coefficients);
 
     const model = {
-      version:3,
+      version:2,
       product:PRODUCT,
       calibratedAt:Date.now(),
       sourceFetchedAt,
@@ -807,22 +769,13 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
       hourlyOOS,
       total:samples.length,
       trainCount:train.length,
-      validationCount:validation.length,
       verifyCount:verify.length,
       accuracy:oos.accuracy,
       brier:oos.brier,
       baselineAccuracy:baselineOos.accuracy,
       baselineBrier:baselineOos.brier,
-      tightThreshold:tight.threshold,
-      tightValidationAccuracy:tight.accuracy,
-      tightValidationCoverage:tight.coverage,
-      tightAccuracy:tightTest.accuracy,
-      tightCoverage:tightTest.coverage,
-      tightCount:tightTest.count,
       trainStart:train[0].timestamp,
       trainEnd:train[train.length-1].timestamp,
-      validationStart:validation[0].timestamp,
-      validationEnd:validation[validation.length-1].timestamp,
       verifyStart:verify[0].timestamp,
       verifyEnd:verify[verify.length-1].timestamp,
       settings:SETTINGS
@@ -833,14 +786,8 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
       calibratedAt:model.calibratedAt,
       total:model.total,
       trainCount:model.trainCount,
-      validationCount:model.validationCount,
       verifyCount:model.verifyCount,
       accuracy:model.accuracy,
-      tightThreshold:model.tightThreshold,
-      tightValidationAccuracy:model.tightValidationAccuracy,
-      tightValidationCoverage:model.tightValidationCoverage,
-      tightAccuracy:model.tightAccuracy,
-      tightCoverage:model.tightCoverage,
       brier:model.brier,
       baselineAccuracy:model.baselineAccuracy,
       baselineBrier:model.baselineBrier,
@@ -857,10 +804,8 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
     ui.mTotal.textContent = model.total.toLocaleString();
     ui.mTrain.textContent = model.trainCount.toLocaleString();
     ui.mVerify.textContent = model.verifyCount.toLocaleString();
-    ui.mAccuracy.textContent = fmtPct(model.tightAccuracy);
+    ui.mAccuracy.textContent = fmtPct(model.accuracy);
     ui.mBrier.textContent = Number.isFinite(model.brier) ? model.brier.toFixed(3) : "—";
-    document.getElementById("tightThreshold").textContent = fmtPct(model.tightThreshold);
-    document.getElementById("tightCoverage").textContent = fmtPct(model.tightCoverage);
     ui.mCoeffs.textContent = Array.isArray(model.coefficients) ? "Score + UTC clock · " + model.coefficients.length + " β" : "—";
     ui.mBaseAccuracy.textContent = fmtPct(model.baselineAccuracy);
     ui.mBaseBrier.textContent = Number.isFinite(model.baselineBrier) ? model.baselineBrier.toFixed(3) : "—";
@@ -880,7 +825,7 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
       state.candles = history.candles;
 
       const cachedModel = !force ? loadLocal(MODEL_KEY) : null;
-      if (cachedModel && cachedModel.version === 3 && cachedModel.sourceFetchedAt === history.fetchedAt &&
+      if (cachedModel && cachedModel.version === 2 && cachedModel.sourceFetchedAt === history.fetchedAt &&
           Array.isArray(cachedModel.coefficients) && cachedModel.coefficients.length === 6) {
         state.model = cachedModel;
         renderDashboard(state.model);
@@ -898,7 +843,7 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
       setStatus("Calibrating expected movement…", "Building DOGE score-and-hour median move estimates with score-only fallback.", "", 0.84);
       await sleep(20);
 
-      setStatus("Running out-of-sample verification…", "Training on 60%, learning the Tight cutoff on 20%, and testing the newest untouched 20%.", "", 0.92);
+      setStatus("Running out-of-sample verification…", "Freezing the first 70% model and testing the newest 30%.", "", 0.92);
       state.model = calibrate(state.samples, history.fetchedAt);
       renderDashboard(state.model);
 
@@ -944,15 +889,9 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
     if (!p) return;
     const up = p.direction === "Higher";
     ui.predictedPrice.textContent = fmtPrice(p.predictedPrice);
-    if (p.qualified === false) {
-      ui.direction.textContent = "PASS · " + (p.confidence * 100).toFixed(1) + "%";
-      ui.direction.className = "direction";
-      ui.confidenceLabel.textContent = "Below Tight cutoff " + fmtPct(state.model.tightThreshold);
-    } else {
-      ui.direction.textContent = p.direction + " " + (p.confidence * 100).toFixed(1) + "%";
-      ui.direction.className = "direction " + (up ? "up" : "down");
-      ui.confidenceLabel.textContent = "Qualified · cutoff " + fmtPct(state.model.tightThreshold);
-    }
+    ui.direction.textContent = p.direction + " " + (p.confidence * 100).toFixed(1) + "%";
+    ui.direction.className = "direction " + (up ? "up" : "down");
+    ui.confidenceLabel.textContent = "Calibrated confidence";
     ui.lockedPrice.textContent = fmtPrice(p.lockedPrice);
     ui.windowLabel.textContent = fmtTime(p.start) + " → " + fmtTime(p.end);
     ui.signalScore.textContent = (p.score > 0 ? "+" : "") + p.score;
@@ -1025,11 +964,6 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
     if (!state.model) throw new Error("Model calibration is not ready.");
     const existing = getLedger().find(p => p.start === boundaryMs);
     if (existing) {
-      existing.qualified = existing.confidence >= state.model.tightThreshold;
-      existing.tightThreshold = state.model.tightThreshold;
-      const existingLedger = getLedger().filter(p => p.start !== boundaryMs);
-      existingLedger.push(existing);
-      saveLedger(existingLedger);
       renderPrediction(existing);
       return existing;
     }
@@ -1069,8 +1003,6 @@ h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
       confidence,
       pHigher,
       score,
-      qualified:confidence >= state.model.tightThreshold,
-      tightThreshold:state.model.tightThreshold,
       expectedMove,
       expectedMoveSource:moveInfo.mode || moveInfo.source || "time-aware",
       expectedMoveSampleSize:Number.isFinite(moveInfo.n) ? moveInfo.n : null,
