@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#090b12" />
+  <meta name="color-scheme" content="dark" />
+  <title>bandjovi — Ethereum 15-Minute Model</title>
+  <style>
+    :root {
+      --bg:#090b12; --panel:#111522; --panel2:#171c2b; --line:#252c3d;
+      --text:#f7f8fb; --muted:#949db1; --green:#35e39b; --red:#ff5b86;
+      --accent:#8f7cff; --blue:#55b8ff; --amber:#ffca5c;
+      --shadow:0 18px 50px rgba(0,0,0,.28);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:radial-gradient(circle at top,#151a2b 0,#090b12 38%,#07090e 100%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;min-height:100%}
+    body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+    button{font:inherit}
+    .wrap{width:min(100%,720px);margin:0 auto;padding:18px 14px 44px}
+    header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin:4px 2px 16px}
+    .brand{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#b7bfff;font-weight:800}
+    h1{font-size:25px;line-height:1.08;margin:4px 0 0;letter-spacing:-.03em}
+    .eth-pill{white-space:nowrap;border:1px solid #343b52;background:#141928;border-radius:999px;padding:8px 10px;color:#dfe3ef;font-size:12px;font-weight:700}
+    .card{background:linear-gradient(180deg,rgba(22,27,43,.98),rgba(14,18,29,.98));border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:18px;margin-bottom:14px}
+    .hero{padding:22px 18px}
+    .eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:800}
+    .predicted-price{font-size:44px;line-height:1;margin:8px 0 12px;letter-spacing:-.045em;font-weight:850}
+    .direction{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;font-size:18px;font-weight:850}
+    .higher{color:var(--green);background:rgba(53,227,155,.10);border:1px solid rgba(53,227,155,.22)}
+    .lower{color:var(--red);background:rgba(255,91,134,.10);border:1px solid rgba(255,91,134,.22)}
+    .pending{color:#d5daea;background:rgba(213,218,234,.08);border:1px solid rgba(213,218,234,.14)}
+    .hero-note{color:var(--muted);font-size:12px;margin-top:9px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+    .metric{padding:13px;border-radius:15px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.055);min-width:0}
+    .metric.full{grid-column:1/-1}
+    .label{font-size:11px;color:var(--muted);margin-bottom:6px}
+    .value{font-size:17px;font-weight:760;letter-spacing:-.01em;overflow-wrap:anywhere}
+    .value.small{font-size:14px}
+    .live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(53,227,155,.11);margin-right:7px;vertical-align:1px}
+    .section-title{font-size:16px;font-weight:800;margin:0 0 12px;letter-spacing:-.015em}
+    .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+    .stat{background:#101521;border:1px solid #232a3a;border-radius:14px;padding:12px}
+    .stat .n{font-size:19px;font-weight:820;margin-top:4px}
+    .explain{font-size:12px;line-height:1.5;color:var(--muted);margin:12px 2px 0}
+    .status{display:flex;gap:10px;align-items:flex-start;padding:13px 14px;border-radius:15px;border:1px solid #293047;background:#101523;margin-bottom:14px}
+    .spinner{width:14px;height:14px;border-radius:50%;border:2px solid #39415a;border-top-color:var(--accent);animation:spin .8s linear infinite;margin-top:2px;flex:0 0 auto}
+    .spinner.done{animation:none;border-color:var(--green);background:var(--green);box-shadow:inset 0 0 0 3px #101523}
+    .spinner.error{animation:none;border-color:var(--red);background:var(--red);box-shadow:inset 0 0 0 3px #101523}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .status-main{font-size:13px;font-weight:700}
+    .status-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+    .actions{display:flex;gap:9px;margin-top:13px;flex-wrap:wrap}
+    .btn{border:1px solid #353d55;background:#171d2d;color:#eef1fa;padding:10px 12px;border-radius:12px;font-weight:750;font-size:13px;cursor:pointer}
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{background:#7566ff;border-color:#7566ff;color:white}
+    .btn:disabled{opacity:.55;cursor:default}
+    .history{display:flex;flex-direction:column;gap:8px}
+    .history-row{display:grid;grid-template-columns:1.35fr 1fr .72fr;gap:8px;align-items:center;background:#101521;border:1px solid #222a3b;border-radius:13px;padding:11px 12px}
+    .history-window{font-size:12px;font-weight:720}
+    .history-dir{font-size:12px;color:#d9deea}
+    .result{text-align:right;font-size:11px;font-weight:900;letter-spacing:.06em}
+    .win{color:var(--green)} .loss{color:var(--red)} .push{color:var(--amber)} .waiting{color:var(--muted)}
+    .empty{color:var(--muted);font-size:12px;padding:8px 2px}
+    .foot{color:#6f788d;font-size:11px;line-height:1.5;text-align:center;padding:8px 10px}
+    .mono{font-variant-numeric:tabular-nums}
+    @media (max-width:380px){.predicted-price{font-size:39px}.value{font-size:15px}.card{border-radius:19px}.wrap{padding-left:10px;padding-right:10px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div>
+        <div class="brand">bandjovi</div>
+        <h1>Ethereum 15-Minute Model</h1>
+      </div>
+      <div class="eth-pill">ETH / USD · 15m</div>
+    </header>
+
+    <div id="statusBox" class="status">
+      <div id="statusIcon" class="spinner"></div>
+      <div>
+        <div id="statusMain" class="status-main">Starting ETH model…</div>
+        <div id="statusSub" class="status-sub">Preparing historical calibration and live market data.</div>
+      </div>
+    </div>
+
+    <section class="card hero">
+      <div class="eyebrow">Predicted 15-minute close</div>
+      <div id="predictedPrice" class="predicted-price mono">—</div>
+      <div id="directionPill" class="direction pending">Waiting for model</div>
+      <div id="heroNote" class="hero-note">Historical-model probability will appear after calibration.</div>
+
+      <div class="grid">
+        <div class="metric">
+          <div class="label">Locked start price</div>
+          <div id="lockedPrice" class="value mono">—</div>
+        </div>
+        <div class="metric">
+          <div class="label"><span class="live-dot"></span>Live ETH/USD</div>
+          <div id="livePrice" class="value mono">—</div>
+        </div>
+        <div class="metric full">
+          <div class="label">Window</div>
+          <div id="windowLabel" class="value small mono">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">Time remaining</div>
+          <div id="countdown" class="value mono">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">Signal score</div>
+          <div id="signalScore" class="value mono">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">Expected historical move</div>
+          <div id="expectedMove" class="value small mono">—</div>
+        </div>
+        <div class="metric">
+          <div class="label">Historical-model probability</div>
+          <div id="pHigher" class="value small mono">—</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="section-title">Calibration dashboard</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="label">Historical windows</div><div id="histWindows" class="n mono">—</div></div>
+        <div class="stat"><div class="label">70% calibration</div><div id="calWindows" class="n mono">—</div></div>
+        <div class="stat"><div class="label">30% verification</div><div id="verWindows" class="n mono">—</div></div>
+        <div class="stat"><div class="label">OOS directional accuracy</div><div id="oosAccuracy" class="n mono">—</div></div>
+        <div class="stat"><div class="label">OOS Brier score</div><div id="brier" class="n mono">—</div></div>
+        <div class="stat"><div class="label">Model coefficients</div><div id="coeffs" class="n mono" style="font-size:13px">—</div></div>
+      </div>
+      <div class="grid" style="margin-top:10px">
+        <div class="metric"><div class="label">Calibration date range</div><div id="calRange" class="value small">—</div></div>
+        <div class="metric"><div class="label">Verification date range</div><div id="verRange" class="value small">—</div></div>
+      </div>
+      <p class="explain">The model is calibrated on older ETH/USD history and verified on the most recent 30% of the historical sample. Its probability and expected movement are learned only from ETH/USD data.</p>
+      <div class="actions">
+        <button id="recalibrateBtn" class="btn primary">Re-run calibration</button>
+        <button id="retryBtn" class="btn">Retry market data</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="section-title">Recent predictions</h2>
+      <div id="historyList" class="history"><div class="empty">No settled predictions yet.</div></div>
+    </section>
+
+    <div class="foot">Statistical ETH/USD forecast derived from historical Coinbase Exchange candles. Forecasts are estimates, not guarantees.</div>
+  </main>
+
+  <script>
+  (function(){
+    'use strict';
+
+    var API = 'https://api.exchange.coinbase.com';
+    var PRODUCT = 'ETH-USD';
+    var INTERVAL_SEC = 900;
+    var INTERVAL_MS = INTERVAL_SEC * 1000;
+    var DAYS = 90;
+    var CHUNK_SIZE = 280;
+    var CACHE_MS = 6 * 60 * 60 * 1000;
+    var HISTORY_KEY = 'sixcents_eth_history_v1';
+    var PREDICTIONS_KEY = 'sixcents_eth_predictions_v1';
+    var MODEL_KEY = 'sixcents_eth_model_v1';
+    var MAX_LEDGER = 30;
+
+    var state = {
+      model:null,
+      historyCandles:[],
+      activePrediction:null,
+      livePrice:null,
+      busy:false,
+      lastWindowStart:null,
+      lastTickerAt:0
+    };
+
+    var el = {};
+    ['statusBox','statusIcon','statusMain','statusSub','predictedPrice','directionPill','heroNote','lockedPrice','livePrice','windowLabel','countdown','signalScore','expectedMove','pHigher','histWindows','calWindows','verWindows','oosAccuracy','brier','coeffs','calRange','verRange','historyList','recalibrateBtn','retryBtn'].forEach(function(id){el[id]=document.getElementById(id);});
+
+    function sleep(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
+    function isFiniteNumber(v){return Number.isFinite(Number(v));}
+    function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+    function sigmoid(z){
+      if(z >= 0){var ez=Math.exp(-z);return 1/(1+ez);}
+      var e=Math.exp(z);return e/(1+e);
+    }
+    function fmtPrice(v){return Number.isFinite(v) ? v.toLocaleString(undefined,{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:2}) : '—';}
+    function fmtPct(v,digits){return Number.isFinite(v) ? (v*100).toFixed(digits == null ? 1 : digits)+'%' : '—';}
+    function fmtTime(ms){return new Date(ms).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
+    function fmtDate(sec){return new Date(sec*1000).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'});}
+    function currentBoundaryMs(){return Math.floor(Date.now()/INTERVAL_MS)*INTERVAL_MS;}
+    function setStatus(main,sub,kind){
+      el.statusMain.textContent=main;
+      el.statusSub.textContent=sub||'';
+      el.statusIcon.className='spinner'+(kind==='done'?' done':kind==='error'?' error':'');
+    }
+    function safeParse(key,fallback){try{var v=localStorage.getItem(key);return v?JSON.parse(v):fallback;}catch(e){return fallback;}}
+    function safeStore(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true;}catch(e){console.warn('Storage failed',e);return false;}}
+
+    function normalizeCandle(raw){
+      if(!Array.isArray(raw) || raw.length < 6) return null;
+      var t=Number(raw[0]), l=Number(raw[1]), h=Number(raw[2]), o=Number(raw[3]), c=Number(raw[4]), v=Number(raw[5]);
+      if(![t,l,h,o,c,v].every(Number.isFinite)) return null;
+      if(t<=0 || o<=0 || h<=0 || l<=0 || c<=0 || v<0 || h<l) return null;
+      return {t:Math.floor(t),l:l,h:h,o:o,c:c,v:v};
+    }
+    function normalizeCandles(rows){
+      var map=new Map();
+      (rows||[]).forEach(function(r){var c=normalizeCandle(r);if(c) map.set(c.t,c);});
+      return Array.from(map.values()).sort(function(a,b){return a.t-b.t;});
+    }
+    function compact(candles){return candles.map(function(c){return [c.t,c.l,c.h,c.o,c.c,c.v];});}
+
+    async function fetchJson(url,tries){
+      tries=tries||3;
+      var lastErr;
+      for(var i=0;i<tries;i++){
+        try{
+          var r=await fetch(url,{cache:'no-store',headers:{'Accept':'application/json'}});
+          if(!r.ok){
+            var detail='';
+            try{
+              var body=await r.json();
+              detail=body&&body.message?': '+body.message:'';
+            }catch(ignore){
+              try{detail=': '+(await r.text()).slice(0,140);}catch(ignore2){}
+            }
+            var err=new Error('HTTP '+r.status+detail);
+            err.status=r.status;
+            throw err;
+          }
+          return await r.json();
+        }catch(e){lastErr=e;if(i<tries-1) await sleep(500*(i+1));}
+      }
+      throw lastErr||new Error('Network request failed');
+    }
+
+    function isoSecond(sec){
+      return new Date(sec*1000).toISOString().replace('.000Z','Z');
+    }
+
+    async function fetchCandles(startSec,endSec){
+      var url=API+'/products/'+PRODUCT+'/candles?granularity=900&start='+encodeURIComponent(isoSecond(startSec))+'&end='+encodeURIComponent(isoSecond(endSec));
+      var data=await fetchJson(url,3);
+      if(!Array.isArray(data)) throw new Error('Unexpected candle response');
+      return normalizeCandles(data);
+    }
+
+    async function downloadHistory(){
+      var boundarySec=Math.floor(Date.now()/INTERVAL_MS)*INTERVAL_SEC;
+      var startSec=boundarySec-(DAYS*24*60*60);
+      startSec=Math.floor(startSec/INTERVAL_SEC)*INTERVAL_SEC;
+      var rows=[];
+      var totalChunks=Math.ceil((boundarySec-startSec)/(CHUNK_SIZE*INTERVAL_SEC));
+      var cursor=startSec;
+      var chunk=0;
+      while(cursor<boundarySec){
+        var requestEnd=Math.min(boundarySec,cursor+(CHUNK_SIZE*INTERVAL_SEC));
+        chunk++;
+        setStatus('Downloading ETH history…',chunk+' / '+totalChunks+' chunks','working');
+        var got=await fetchCandles(cursor,requestEnd);
+        rows=rows.concat(got.map(function(c){return [c.t,c.l,c.h,c.o,c.c,c.v];}));
+        cursor=requestEnd;
+        if(cursor<boundarySec) await sleep(300);
+      }
+      var candles=normalizeCandles(rows).filter(function(c){return c.t>=startSec&&c.t<boundarySec;});
+      if(candles.length<3000) throw new Error('Historical download returned too few valid candles ('+candles.length+').');
+      safeStore(HISTORY_KEY,{cachedAt:Date.now(),product:PRODUCT,granularity:INTERVAL_SEC,candles:compact(candles)});
+      return candles;
+    }
+
+    function emaSeries(values,period){
+      var out=new Array(values.length).fill(null), k=2/(period+1), ema=null;
+      for(var i=0;i<values.length;i++){
+        var x=values[i];
+        if(!Number.isFinite(x)) continue;
+        ema=ema==null?x:(x*k+ema*(1-k));
+        out[i]=ema;
+      }
+      return out;
+    }
+
+    function indicatorScores(candles){
+      var n=candles.length;
+      var closes=candles.map(function(c){return c.c;});
+      var ema9=emaSeries(closes,9), ema21=emaSeries(closes,21), ema12=emaSeries(closes,12), ema26=emaSeries(closes,26);
+      var macd=new Array(n).fill(null);
+      for(var i=0;i<n;i++) if(Number.isFinite(ema12[i])&&Number.isFinite(ema26[i])) macd[i]=ema12[i]-ema26[i];
+      var macdSignal=emaSeries(macd,9);
+      var rsi=new Array(n).fill(null);
+      var avgGain=null,avgLoss=null,gains=[],losses=[];
+      for(i=1;i<n;i++){
+        var d=closes[i]-closes[i-1],g=Math.max(d,0),lo=Math.max(-d,0);
+        if(i<=14){gains.push(g);losses.push(lo);if(i===14){avgGain=gains.reduce(function(a,b){return a+b;},0)/14;avgLoss=losses.reduce(function(a,b){return a+b;},0)/14;}}
+        else{avgGain=(avgGain*13+g)/14;avgLoss=(avgLoss*13+lo)/14;}
+        if(i>=14){rsi[i]=avgLoss===0?100:100-(100/(1+avgGain/avgLoss));}
+      }
+      var score=new Array(n).fill(null);
+      for(i=0;i<n;i++){
+        if(i<35) continue;
+        var s=0;
+        if(ema9[i]>ema21[i]) s+=2; else if(ema9[i]<ema21[i]) s-=2;
+        var hist=macd[i]-macdSignal[i];
+        if(hist>0) s+=2; else if(hist<0) s-=2;
+        if(rsi[i]>=55) s+=1; else if(rsi[i]<=45) s-=1;
+
+        if(i>=3){
+          var pv=0,vol=0;
+          for(var j=i-3;j<=i;j++){
+            var tp=(candles[j].h+candles[j].l+candles[j].c)/3;
+            pv+=tp*candles[j].v;vol+=candles[j].v;
+          }
+          if(vol>0){var vwap=pv/vol;if(closes[i]>vwap) s+=1; else if(closes[i]<vwap) s-=1;}
+        }
+
+        if(i>=19){
+          var sum=0;for(j=i-19;j<=i;j++) sum+=closes[j];
+          var mean=sum/20,ss=0;for(j=i-19;j<=i;j++){var q=closes[j]-mean;ss+=q*q;}
+          var sd=Math.sqrt(ss/20),upper=mean+2*sd,lower=mean-2*sd;
+          if(upper>lower){var pctB=(closes[i]-lower)/(upper-lower);if(pctB>0.55)s+=1;else if(pctB<0.45)s-=1;}
+        }
+
+        var momentum=(closes[i]/closes[i-1]-1)*100;
+        if(momentum>0.05)s+=1;else if(momentum<-0.05)s-=1;
+
+        if(i>=4){
+          var prevVol=(candles[i-1].v+candles[i-2].v+candles[i-3].v+candles[i-4].v)/4;
+          var ratio=prevVol>0?candles[i].v/prevVol:0;
+          if(ratio>=1.20){if(momentum>0)s+=1;else if(momentum<0)s-=1;}
+        }
+        score[i]=s;
+      }
+      return score;
+    }
+
+    function buildSamples(candles){
+      var scores=indicatorScores(candles), samples=[];
+      for(var i=36;i<candles.length;i++){
+        var technical=scores[i-1];
+        var cur=candles[i];
+        if(!Number.isFinite(technical)||!Number.isFinite(cur.o)||!Number.isFinite(cur.c)||cur.o<=0||cur.c<=0||cur.c===cur.o) continue;
+        var lr=Math.log(cur.c/cur.o);
+        samples.push({t:cur.t,score:technical,open:cur.o,close:cur.c,y:cur.c>cur.o?1:0,logReturn:lr,absMove:Math.abs(lr)});
+      }
+      return samples;
+    }
+
+    function fitLogistic(samples){
+      var a=0,b=0,lambda=0.001;
+      for(var iter=0;iter<35;iter++){
+        var g0=0,g1=0,h00=0,h01=0,h11=0;
+        for(var i=0;i<samples.length;i++){
+          var x=samples[i].score,y=samples[i].y,p=sigmoid(a+b*x),w=Math.max(1e-9,p*(1-p));
+          g0+=(y-p);g1+=(y-p)*x;
+          h00+=w;h01+=w*x;h11+=w*x*x;
+        }
+        g1-=lambda*b;h11+=lambda;
+        var det=h00*h11-h01*h01;
+        if(Math.abs(det)<1e-12) break;
+        var da=(g0*h11-g1*h01)/det;
+        var db=(g1*h00-g0*h01)/det;
+        a+=da;b+=db;
+        if(Math.abs(da)+Math.abs(db)<1e-9) break;
+      }
+      return {a:a,b:b};
+    }
+
+    function median(arr){
+      if(!arr.length) return 0;
+      var a=arr.slice().sort(function(x,y){return x-y;}),m=Math.floor(a.length/2);
+      return a.length%2?a[m]:(a[m-1]+a[m])/2;
+    }
+
+    function expectedMoveForScore(training,score){
+      var matches=training.filter(function(s){return Math.abs(s.score-score)<=1;});
+      if(matches.length<30) matches=training.filter(function(s){return Math.abs(s.score-score)<=2;});
+      if(matches.length<30) matches=training;
+      return median(matches.map(function(s){return s.absMove;}));
+    }
+
+    function calibrate(candles){
+      setStatus('Building historical signals…','Applying completed-candle indicators without look-ahead.','working');
+      var samples=buildSamples(candles);
+      if(samples.length<1000) throw new Error('Too few usable forecasting samples.');
+      var cut=Math.floor(samples.length*0.70);
+      var training=samples.slice(0,cut), verification=samples.slice(cut);
+      setStatus('Calibrating probability model…','Fitting ETH-only logistic regression on the oldest 70%.','working');
+      var co=fitLogistic(training);
+      var correct=0,brierSum=0;
+      for(var i=0;i<verification.length;i++){
+        var p=clamp(sigmoid(co.a+co.b*verification[i].score),0.001,0.999);
+        var pred=p>=0.5?1:0;
+        if(pred===verification[i].y) correct++;
+        var d=p-verification[i].y;brierSum+=d*d;
+      }
+      var byScore={};
+      for(var score=-9;score<=9;score++) byScore[String(score)]=expectedMoveForScore(training,score);
+      var model={
+        version:1,product:PRODUCT,generatedAt:Date.now(),a:co.a,b:co.b,
+        total:samples.length,calibrationCount:training.length,verificationCount:verification.length,
+        accuracy:verification.length?correct/verification.length:0,
+        brier:verification.length?brierSum/verification.length:0,
+        calStart:training[0].t,calEnd:training[training.length-1].t,
+        verStart:verification[0].t,verEnd:verification[verification.length-1].t,
+        expectedMoveByScore:byScore,
+        fallbackExpectedMove:median(training.map(function(s){return s.absMove;})),
+        candleCount:candles.length
+      };
+      safeStore(MODEL_KEY,model);
+      return model;
+    }
+
+    function renderModel(){
+      var m=state.model;if(!m)return;
+      el.histWindows.textContent=m.total.toLocaleString();
+      el.calWindows.textContent=m.calibrationCount.toLocaleString();
+      el.verWindows.textContent=m.verificationCount.toLocaleString();
+      el.oosAccuracy.textContent=fmtPct(m.accuracy,1);
+      el.brier.textContent=Number.isFinite(m.brier)?m.brier.toFixed(3):'—';
+      el.coeffs.textContent='a '+m.a.toFixed(4)+' · b '+m.b.toFixed(4);
+      el.calRange.textContent=fmtDate(m.calStart)+' → '+fmtDate(m.calEnd);
+      el.verRange.textContent=fmtDate(m.verStart)+' → '+fmtDate(m.verEnd);
+    }
+
+    function ledger(){var x=safeParse(PREDICTIONS_KEY,[]);return Array.isArray(x)?x:[];}
+    function saveLedger(items){safeStore(PREDICTIONS_KEY,items.slice(-MAX_LEDGER));}
+
+    function renderHistory(){
+      var items=ledger().slice().sort(function(a,b){return b.start-a.start;}).slice(0,8);
+      if(!items.length){el.historyList.innerHTML='<div class="empty">No predictions recorded yet.</div>';return;}
+      el.historyList.innerHTML='';
+      items.forEach(function(p){
+        var row=document.createElement('div');row.className='history-row';
+        var result=p.result||'PENDING';
+        var cls=result==='WIN'?'win':result==='LOSS'?'loss':result==='PUSH'?'push':'waiting';
+        row.innerHTML='<div class="history-window mono">'+fmtTime(p.start)+'–'+fmtTime(p.end)+'</div><div class="history-dir">'+p.direction+' '+fmtPct(p.confidence,1)+'</div><div class="result '+cls+'">'+result+'</div>';
+        el.historyList.appendChild(row);
+      });
+    }
+
+    function expectedMove(score){
+      if(!state.model) return 0;
+      var key=String(Math.max(-9,Math.min(9,Math.round(score))));
+      var v=Number(state.model.expectedMoveByScore&&state.model.expectedMoveByScore[key]);
+      return Number.isFinite(v)&&v>0?v:state.model.fallbackExpectedMove;
+    }
+
+    function renderPrediction(p){
+      state.activePrediction=p||null;
+      if(!p){
+        el.predictedPrice.textContent='—';el.directionPill.className='direction pending';el.directionPill.textContent='Waiting for forecast';
+        el.lockedPrice.textContent='—';el.windowLabel.textContent='—';el.signalScore.textContent='—';el.expectedMove.textContent='—';el.pHigher.textContent='—';
+        return;
+      }
+      el.predictedPrice.textContent=fmtPrice(p.predictedPrice);
+      el.directionPill.className='direction '+(p.direction==='Higher'?'higher':'lower');
+      el.directionPill.textContent=p.direction+' '+fmtPct(p.confidence,1);
+      el.heroNote.textContent='Calibrated confidence from ETH-only historical outcomes.';
+      el.lockedPrice.textContent=fmtPrice(p.lockedPrice);
+      el.windowLabel.textContent=fmtTime(p.start)+' → '+fmtTime(p.end);
+      el.signalScore.textContent=(p.score>0?'+':'')+p.score;
+      el.expectedMove.textContent=fmtPct(p.expectedMove,2);
+      el.pHigher.textContent='Higher '+fmtPct(p.pHigher,1);
+      updateCountdown();
+    }
+
+    function findSavedPrediction(startMs){
+      var items=ledger();
+      for(var i=items.length-1;i>=0;i--) if(items[i].start===startMs) return items[i];
+      return null;
+    }
+
+    async function boundaryCandle(boundaryMs){
+      var sec=Math.floor(boundaryMs/1000);
+      for(var attempt=0;attempt<5;attempt++){
+        var nowSec=Math.floor(Date.now()/1000);
+        var requestEnd=Math.max(sec,Math.min(sec+INTERVAL_SEC,nowSec));
+        var got=await fetchCandles(sec,requestEnd);
+        var c=got.find(function(x){return x.t===sec;});
+        if(c) return c;
+        await sleep(900*(attempt+1));
+      }
+      throw new Error('Official quarter-hour candle is not available yet.');
+    }
+
+    async function recentCompletedCandles(boundaryMs){
+      var sec=Math.floor(boundaryMs/1000);
+      var recent=await fetchCandles(sec-(120*INTERVAL_SEC),sec);
+      var merged=new Map();
+      state.historyCandles.forEach(function(c){if(c.t<sec)merged.set(c.t,c);});
+      recent.forEach(function(c){if(c.t<sec)merged.set(c.t,c);});
+      return Array.from(merged.values()).sort(function(a,b){return a.t-b.t;}).slice(-180);
+    }
+
+    async function createPrediction(boundaryMs){
+      if(!state.model) throw new Error('ETH model is not calibrated yet.');
+      setStatus('Creating locked ETH forecast…','Reading the official Coinbase quarter-hour open and completed pre-window candles.','working');
+      var candle=await boundaryCandle(boundaryMs);
+      var completed=await recentCompletedCandles(boundaryMs);
+      if(completed.length<40) throw new Error('Not enough completed candles for live indicators.');
+      var scores=indicatorScores(completed);
+      var score=scores[scores.length-1];
+      if(!Number.isFinite(score)) throw new Error('Could not calculate current technical score.');
+      var p=clamp(sigmoid(state.model.a+state.model.b*score),0.001,0.999);
+      var direction=p>=0.5?'Higher':'Lower';
+      var confidence=p>=0.5?p:1-p;
+      var move=expectedMove(score);
+      var predicted=direction==='Higher'?candle.o*Math.exp(move):candle.o*Math.exp(-move);
+      if(![candle.o,p,confidence,move,predicted].every(Number.isFinite)) throw new Error('Forecast calculation produced an invalid number.');
+      var pred={
+        start:boundaryMs,end:boundaryMs+INTERVAL_MS,lockedPrice:candle.o,predictedPrice:predicted,
+        direction:direction,confidence:confidence,pHigher:p,score:score,expectedMove:move,
+        createdAt:Date.now(),result:'PENDING'
+      };
+      var items=ledger().filter(function(x){return x.start!==pred.start;});items.push(pred);saveLedger(items);
+      renderHistory();
+      return pred;
+    }
+
+    async function settlePending(currentStartMs){
+      var items=ledger(),changed=false;
+      for(var i=0;i<items.length;i++){
+        var p=items[i];
+        if((!p.result||p.result==='PENDING')&&p.end<=currentStartMs){
+          try{
+            var c=await boundaryCandle(p.end);
+            var actual=c.o;
+            var actualDirection=actual>p.lockedPrice?'Higher':actual<p.lockedPrice?'Lower':'Flat';
+            p.actualPrice=actual;p.actualDirection=actualDirection;
+            p.result=actualDirection==='Flat'?'PUSH':actualDirection===p.direction?'WIN':'LOSS';
+            changed=true;
+          }catch(e){console.warn('Settlement delayed',e);}
+        }
+      }
+      if(changed){saveLedger(items);renderHistory();}
+    }
+
+    async function fetchTicker(){
+      try{
+        var data=await fetchJson(API+'/products/'+PRODUCT+'/ticker',2);
+        var px=Number(data.price);
+        if(Number.isFinite(px)&&px>0){state.livePrice=px;el.livePrice.textContent=fmtPrice(px);state.lastTickerAt=Date.now();}
+      }catch(e){console.warn('Ticker update failed',e);}
+    }
+
+    function updateCountdown(){
+      var p=state.activePrediction;if(!p){el.countdown.textContent='—';return;}
+      var remaining=Math.max(0,p.end-Date.now());
+      var total=Math.ceil(remaining/1000),m=Math.floor(total/60),s=total%60;
+      el.countdown.textContent=m+':'+String(s).padStart(2,'0');
+    }
+
+    async function ensureCurrentPrediction(){
+      if(state.busy||!state.model)return;
+      var start=currentBoundaryMs();
+      if(state.activePrediction&&state.activePrediction.start===start){return;}
+      state.busy=true;
+      try{
+        await settlePending(start);
+        var saved=findSavedPrediction(start);
+        if(saved){renderPrediction(saved);setStatus('Forecast restored','This quarter-hour prediction was restored from local storage.','done');}
+        else{
+          var p=await createPrediction(start);renderPrediction(p);setStatus('Forecast locked','Prediction remains fixed until '+fmtTime(p.end)+'.','done');
+        }
+        state.lastWindowStart=start;
+      }catch(e){
+        setStatus('Live forecast temporarily unavailable',e.message||String(e),'error');
+      }finally{state.busy=false;}
+    }
+
+    async function initModel(force){
+      if(state.busy)return;
+      state.busy=true;el.recalibrateBtn.disabled=true;
+      try{
+        var cache=safeParse(HISTORY_KEY,null),model=safeParse(MODEL_KEY,null),now=Date.now();
+        var validCache=cache&&cache.product===PRODUCT&&Array.isArray(cache.candles)&&(now-cache.cachedAt)<CACHE_MS;
+        var validModel=model&&model.product===PRODUCT&&(now-model.generatedAt)<CACHE_MS;
+        if(force){validCache=false;validModel=false;localStorage.removeItem(HISTORY_KEY);localStorage.removeItem(MODEL_KEY);}
+        if(validCache){state.historyCandles=normalizeCandles(cache.candles);}
+        else{state.historyCandles=await downloadHistory();}
+        if(validModel){state.model=model;setStatus('Using cached ETH calibration','Historical dataset and model are less than six hours old.','done');}
+        else{
+          state.model=calibrate(state.historyCandles);
+          setStatus('Calibration complete','Out-of-sample verification finished on the newest 30% of ETH history.','done');
+        }
+        renderModel();
+      }catch(e){
+        console.error(e);setStatus('Calibration failed',e.message||String(e),'error');
+      }finally{
+        state.busy=false;el.recalibrateBtn.disabled=false;
+      }
+      await ensureCurrentPrediction();
+    }
+
+    async function marketLoop(){
+      if(Date.now()-state.lastTickerAt>4500) fetchTicker();
+      var start=currentBoundaryMs();
+      if(!state.activePrediction||state.activePrediction.start!==start) await ensureCurrentPrediction();
+    }
+
+    function restoreActive(){
+      var start=currentBoundaryMs(),saved=findSavedPrediction(start);
+      if(saved) renderPrediction(saved);
+      renderHistory();
+    }
+
+    el.recalibrateBtn.addEventListener('click',function(){initModel(true);});
+    el.retryBtn.addEventListener('click',function(){fetchTicker();ensureCurrentPrediction();if(!state.model)initModel(false);});
+    document.addEventListener('visibilitychange',function(){if(!document.hidden){fetchTicker();ensureCurrentPrediction();}});
+    window.addEventListener('online',function(){fetchTicker();ensureCurrentPrediction();});
+
+    restoreActive();
+    fetchTicker();
+    initModel(false);
+    setInterval(updateCountdown,500);
+    setInterval(marketLoop,5000);
+  })();
+  </script>
+</body>
+</html>
