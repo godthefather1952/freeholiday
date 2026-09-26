@@ -102,11 +102,11 @@
         <div id="totalWindows" class="value">—</div>
       </div>
       <div class="metric">
-        <div class="label">70% calibration</div>
+        <div class="label">60% training</div>
         <div id="trainWindows" class="value">—</div>
       </div>
       <div class="metric">
-        <div class="label">30% out-of-sample</div>
+        <div class="label">20% untouched test</div>
         <div id="testWindows" class="value">—</div>
       </div>
       <div class="metric">
@@ -122,12 +122,12 @@
         <div id="signalScore" class="value">—</div>
       </div>
     </div>
-    <p class="small" id="rangeText">The split is chronological, not randomized. The model is fitted only on the first 70% and then frozen before the last 30% is evaluated.</p>
+    <p class="small" id="rangeText">The split is chronological: 60% trains the model, 20% selects the Tight Mode confidence cutoff, and the newest 20% remains untouched for final verification.</p>
   </section>
 
   <section class="card">
     <div class="value">No-look-ahead design</div>
-    <p class="small">For historical window <strong>i</strong>, the locked price is that 15-minute candle's open and every indicator is calculated only from candles that ended before window <strong>i</strong> began. The candle's close is used only afterward as the Higher/Lower outcome. The 70/30 split occurs on a clean quarter-hour boundary, and the 30% verification segment never participates in calibration.</p>
+    <p class="small">For historical window <strong>i</strong>, the locked price is that 15-minute candle's open and every indicator is calculated only from candles that ended before window <strong>i</strong> began. The candle's close is used only afterward as the Higher/Lower outcome. The 60/20/20 split occurs on clean quarter-hour boundaries. The middle 20% selects the Tight Mode cutoff and the newest 20% never participates in training or threshold selection.</p>
     <div>
       <span class="pill">EMA 9 / 21</span>
       <span class="pill">MACD 12 / 26 / 9</span>
@@ -391,6 +391,39 @@
     };
   }
 
+  function thresholdStats(samples,m,threshold){
+    var qualified=0,correct=0;
+    for(var i=0;i<samples.length;i++){
+      var p=probabilityHigher(samples[i].score,m);
+      var confidence=p>=0.5?p:1-p;
+      if(confidence+1e-12<threshold) continue;
+      qualified++;
+      if((p>=0.5?1:0)===samples[i].y) correct++;
+    }
+    var accuracy=qualified?correct/qualified:NaN;
+    var coverage=samples.length?qualified/samples.length:0;
+    var lower=qualified&&Number.isFinite(accuracy)
+      ? accuracy-1.96*Math.sqrt(Math.max(0,accuracy*(1-accuracy)/qualified))
+      : -Infinity;
+    return {threshold:threshold,count:qualified,accuracy:accuracy,coverage:coverage,lower:lower};
+  }
+
+  function chooseTightThreshold(validation,m){
+    var minCount=Math.max(100,Math.ceil(validation.length*0.20));
+    var best=null;
+    for(var step=0;step<=60;step++){
+      var threshold=0.50+step*0.005;
+      var s=thresholdStats(validation,m,threshold);
+      if(s.count<minCount) continue;
+      if(!best || s.lower>best.lower+1e-9 ||
+        (Math.abs(s.lower-best.lower)<=1e-9 && s.accuracy>best.accuracy+1e-9) ||
+        (Math.abs(s.lower-best.lower)<=1e-9 && Math.abs(s.accuracy-best.accuracy)<=1e-9 && s.coverage>best.coverage)){
+        best=s;
+      }
+    }
+    return best || thresholdStats(validation,m,0.50);
+  }
+
   async function apiJSON(path){
     var res=await fetch(API+path,{cache:"no-store",headers:{"Accept":"application/json"}});
     if(!res.ok) throw new Error("Coinbase market-data request failed ("+res.status+").");
@@ -483,25 +516,40 @@
       throw new Error("Only "+samples.length+" usable historical windows were available. At least "+MIN_WINDOWS+" are required.");
     }
 
-    var split=Math.floor(samples.length*0.70);
-    split=clamp(split,1,samples.length-1);
-    var train=samples.slice(0,split);
-    var test=samples.slice(split);
+    var trainEnd=Math.floor(samples.length*0.60);
+    var validationEnd=Math.floor(samples.length*0.80);
+    trainEnd=clamp(trainEnd,1,samples.length-2);
+    validationEnd=clamp(validationEnd,trainEnd+1,samples.length-1);
+    var train=samples.slice(0,trainEnd);
+    var validation=samples.slice(trainEnd,validationEnd);
+    var test=samples.slice(validationEnd);
     var fitted=fitLogistic(train);
     var moveByScore=fitMoveModel(train);
     var metrics=evaluate(test,fitted);
+    var tight=chooseTightThreshold(validation,fitted);
+    var tightTest=thresholdStats(test,fitted,tight.threshold);
 
     model={
+      version:4,
       a:fitted.a,
       b:fitted.b,
       moveByScore:moveByScore,
       samples:samples.length,
       train:train.length,
+      validation:validation.length,
       test:test.length,
       accuracy:metrics.accuracy,
       brier:metrics.brier,
+      tightThreshold:tight.threshold,
+      tightValidationAccuracy:tight.accuracy,
+      tightValidationCoverage:tight.coverage,
+      tightAccuracy:tightTest.accuracy,
+      tightCoverage:tightTest.coverage,
+      tightCount:tightTest.count,
       trainStart:train[0].time,
       trainEnd:train[train.length-1].time,
+      validationStart:validation[0].time,
+      validationEnd:validation[validation.length-1].time,
       testStart:test[0].time,
       testEnd:test[test.length-1].time
     };
@@ -568,7 +616,7 @@
     el("totalWindows").textContent=model.samples.toLocaleString();
     el("trainWindows").textContent=model.train.toLocaleString();
     el("testWindows").textContent=model.test.toLocaleString();
-    el("oosAccuracy").textContent=fmtPct(model.accuracy,1);
+    el("oosAccuracy").textContent=fmtPct(model.tightAccuracy,1);
     el("brier").textContent=model.brier.toFixed(3);
     el("rangeText").textContent=
       "Calibration: "+dateShort(model.trainStart)+" → "+dateShort(model.trainEnd)+
@@ -613,11 +661,17 @@
     var existing=stored.find(function(x){return x.start===start;});
     if(existing){
       currentPrediction=existing;
+      currentPrediction.qualified=currentPrediction.confidence>=model.tightThreshold;
+      currentPrediction.tightThreshold=model.tightThreshold;
       if(!Number.isFinite(currentPrediction.predictedPrice)){
         currentPrediction.predictedPrice=predictedPrice;
         currentPrediction.predictedMove=predictedMove;
         var existingIndex=stored.findIndex(function(x){return x.start===start;});
         if(existingIndex>=0) stored[existingIndex]=currentPrediction;
+        savePredictionHistory(stored);
+      }else{
+        var existingIndex2=stored.findIndex(function(x){return x.start===start;});
+        if(existingIndex2>=0) stored[existingIndex2]=currentPrediction;
         savePredictionHistory(stored);
       }
     }else{
@@ -629,6 +683,8 @@
         confidence:confidence,
         pHigher:pHigher,
         score:s.score,
+        qualified:confidence>=model.tightThreshold,
+        tightThreshold:model.tightThreshold,
         predictedPrice:predictedPrice,
         predictedMove:predictedMove,
         createdAt:Date.now()
@@ -644,15 +700,22 @@
   function renderPrediction(){
     if(!currentPrediction) return;
     var p=el("prediction");
-    p.textContent=currentPrediction.direction+" "+(currentPrediction.confidence*100).toFixed(1)+"%";
-    p.className="prediction "+(currentPrediction.direction==="Higher"?"higher":"lower");
+    if(currentPrediction.qualified===false){
+      p.textContent="PASS · "+(currentPrediction.confidence*100).toFixed(1)+"%";
+      p.className="prediction loading";
+    }else{
+      p.textContent=currentPrediction.direction+" "+(currentPrediction.confidence*100).toFixed(1)+"%";
+      p.className="prediction "+(currentPrediction.direction==="Higher"?"higher":"lower");
+    }
     el("predictedPrice").textContent=fmtMoney(currentPrediction.predictedPrice);
     el("lockedPrice").textContent=fmtMoney(currentPrediction.lockedPrice);
     el("windowTime").textContent=timeOnly(currentPrediction.start)+" → "+timeOnly(currentPrediction.end);
     el("signalScore").textContent=(currentPrediction.score>0?"+":"")+currentPrediction.score.toFixed(1);
     el("heroStatus").textContent=
       "Locked at "+timeOnly(currentPrediction.start)+
-      ". The price estimate uses the median 15-minute move from similar-score windows in the 70% calibration set; the confidence and price remain locked for this window.";
+      ". Tight cutoff "+(model.tightThreshold*100).toFixed(1)+"%. "+
+      (currentPrediction.qualified===false?"This setup is below the learned cutoff and is PASS-only. ":"This setup qualifies for Tight Mode. ")+
+      "The confidence and price remain locked for this window.";
   }
 
   function updateCountdown(){
