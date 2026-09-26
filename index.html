@@ -3,19 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#070a10">
-<title>FreeHoliday — Crypto Quarter-Hour Forecasts</title>
+<meta name="theme-color" content="#06090f">
+<title>FreeHoliday — Crypto Forecast Dashboard</title>
 <style>
 :root{
   color-scheme:dark;
   --bg:#05070b;
   --panel:#0b1018;
-  --line:#1d2735;
+  --panel2:#101722;
+  --line:#202a38;
   --text:#f5f7fb;
-  --muted:#8e99a8;
+  --muted:#8995a6;
+  --up:#35d694;
+  --down:#ff6685;
   --btc:#f7931a;
   --eth:#8fa8ff;
   --doge:#d8ad36;
+  --shadow:0 18px 55px rgba(0,0,0,.28);
 }
 *{box-sizing:border-box}
 html{background:var(--bg)}
@@ -23,139 +27,314 @@ body{
   margin:0;
   min-height:100%;
   background:
-    radial-gradient(circle at 20% -10%,rgba(247,147,26,.10),transparent 32%),
-    radial-gradient(circle at 80% 0%,rgba(143,168,255,.09),transparent 30%),
+    radial-gradient(circle at 12% -8%,rgba(247,147,26,.11),transparent 27%),
+    radial-gradient(circle at 86% 0%,rgba(143,168,255,.10),transparent 29%),
+    radial-gradient(circle at 50% 110%,rgba(216,173,54,.07),transparent 31%),
     var(--bg);
   color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",Inter,Segoe UI,sans-serif;
   padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
 }
-.shell{width:min(100%,780px);margin:0 auto;padding:18px 12px 36px}
-.hero{
-  padding:18px 16px 16px;
-  margin-bottom:14px;
-  border:1px solid var(--line);
-  border-radius:22px;
-  background:linear-gradient(180deg,rgba(17,24,39,.96),rgba(9,13,20,.96));
-  box-shadow:0 18px 50px rgba(0,0,0,.24)
+button{font:inherit}
+.shell{width:min(100%,1180px);margin:0 auto;padding:18px 13px 42px}
+.topbar{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
+  padding:7px 3px 18px;
 }
-.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--muted)}
-h1{font-size:26px;line-height:1.08;letter-spacing:-.04em;margin:7px 0 7px}
-.hero p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
-.coin-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:13px}
-.coin{
-  padding:6px 9px;border:1px solid var(--line);border-radius:999px;
-  font-size:11px;font-weight:800;background:rgba(255,255,255,.025)
+.kicker{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
+.sync{
+  display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px;white-space:nowrap
 }
-.coin.btc{color:var(--btc)} .coin.eth{color:var(--eth)} .coin.doge{color:var(--doge)}
-.model{
-  border:1px solid var(--line);
-  border-radius:22px;
-  overflow:hidden;
-  background:var(--panel);
-  box-shadow:0 14px 40px rgba(0,0,0,.20);
-  margin:0 0 14px;
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 0 4px rgba(53,214,148,.09)}
+.dashboard{display:grid;grid-template-columns:1fr;gap:13px}
+.forecast-card{
+  position:relative;overflow:hidden;
+  border:1px solid var(--line);border-radius:24px;
+  background:linear-gradient(180deg,rgba(17,24,36,.98),rgba(9,14,22,.98));
+  box-shadow:var(--shadow);
 }
-.model-head{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  padding:11px 14px;border-bottom:1px solid var(--line);
-  background:rgba(255,255,255,.018)
+.forecast-card:before{
+  content:"";position:absolute;width:190px;height:190px;right:-70px;top:-90px;border-radius:50%;
+  pointer-events:none;opacity:.17
 }
-.model-name{font-size:13px;font-weight:850;letter-spacing:-.01em}
-.model-product{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px}
-.dot.btc{background:var(--btc)} .dot.eth{background:var(--eth)} .dot.doge{background:var(--doge)}
-iframe{
-  display:block;width:100%;height:900px;border:0;background:#070a10;
-  overflow:hidden;
+.forecast-card.btc:before{background:radial-gradient(circle,var(--btc),transparent 68%)}
+.forecast-card.eth:before{background:radial-gradient(circle,var(--eth),transparent 68%)}
+.forecast-card.doge:before{background:radial-gradient(circle,var(--doge),transparent 68%)}
+.card-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:15px 16px 13px;border-bottom:1px solid rgba(255,255,255,.055)
 }
-.footer{text-align:center;color:var(--muted);font-size:10px;line-height:1.5;padding:3px 10px 0}
-@media (min-width:700px){
-  .shell{padding:24px 18px 48px}
-  .hero{padding:22px 20px 19px}
-  h1{font-size:30px}
+.asset{display:flex;align-items:center;gap:10px;min-width:0}
+.asset-icon{
+  width:37px;height:37px;border-radius:12px;display:grid;place-items:center;
+  font-size:17px;font-weight:900;color:#071019;flex:0 0 auto
+}
+.btc .asset-icon{background:linear-gradient(135deg,#f7931a,#ffc56f)}
+.eth .asset-icon{background:linear-gradient(135deg,#7895ff,#c3ceff)}
+.doge .asset-icon{background:linear-gradient(135deg,#c99b25,#f2d56f)}
+.asset-name{font-size:15px;font-weight:850;letter-spacing:-.015em}
+.asset-sub{font-size:10px;color:var(--muted);margin-top:3px;letter-spacing:.03em}
+.model-state{
+  padding:6px 8px;border-radius:999px;border:1px solid var(--line);
+  font-size:9px;font-weight:850;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+  background:rgba(255,255,255,.025);max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+.card-body{padding:18px 16px 15px}
+.label{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.035em;text-transform:uppercase}
+.predicted{font-size:43px;line-height:1.03;letter-spacing:-.055em;font-weight:850;margin:7px 0 10px;font-variant-numeric:tabular-nums}
+.direction-row{display:flex;align-items:center;gap:8px;min-height:29px}
+.direction{
+  display:inline-flex;align-items:center;padding:7px 10px;border-radius:999px;
+  font-size:13px;font-weight:900;letter-spacing:-.01em;border:1px solid var(--line);
+  background:rgba(255,255,255,.025)
+}
+.direction.higher{color:var(--up);border-color:rgba(53,214,148,.24);background:rgba(53,214,148,.075)}
+.direction.lower{color:var(--down);border-color:rgba(255,102,133,.25);background:rgba(255,102,133,.075)}
+.direction.pending{color:var(--muted)}
+.window-chip{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.metrics{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:17px
+}
+.metric{
+  min-width:0;padding:11px 10px;border-radius:14px;border:1px solid #1d2735;
+  background:rgba(3,7,13,.45)
+}
+.metric.wide{grid-column:1/-1}
+.metric-value{
+  margin-top:5px;font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-variant-numeric:tabular-nums
+}
+.card-foot{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:11px 16px 13px;border-top:1px solid rgba(255,255,255,.055)
+}
+.status-text{
+  min-width:0;color:var(--muted);font-size:10px;line-height:1.35;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.recalibrate{
+  appearance:none;border:1px solid #2b3749;background:#111a27;color:#dce3ed;
+  border-radius:10px;padding:7px 9px;font-size:10px;font-weight:800;white-space:nowrap;cursor:pointer
+}
+.recalibrate:active{transform:translateY(1px)}
+.note{text-align:center;color:var(--muted);font-size:10px;line-height:1.5;padding:15px 8px 0}
+.engine-frame{
+  position:absolute!important;left:-10000px!important;top:0!important;
+  width:2px!important;height:2px!important;opacity:.001!important;
+  pointer-events:none!important;border:0!important
+}
+@media (min-width:760px){
+  .shell{padding:26px 20px 48px}
+  .dashboard{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
+  h1{font-size:34px}
+  .predicted{font-size:39px}
+}
+@media (max-width:370px){
+  .predicted{font-size:37px}
+  .card-body{padding-left:14px;padding-right:14px}
 }
 </style>
 </head>
 <body>
 <main class="shell">
-  <header class="hero">
-    <div class="eyebrow">Quarter-hour forecast dashboard</div>
-    <h1>BTC · ETH · DOGE</h1>
-    <p>Three independent 15-minute forecasting models running together on one continuous page.</p>
-    <div class="coin-row" aria-label="Markets">
-      <span class="coin btc">BTC / USD</span>
-      <span class="coin eth">ETH / USD</span>
-      <span class="coin doge">DOGE / USD</span>
+  <header class="topbar">
+    <div>
+      <div class="kicker">FreeHoliday · 15-minute forecast</div>
+      <h1>Crypto Forecasts</h1>
     </div>
+    <div class="sync"><span class="sync-dot"></span><span id="syncLabel">Engines starting</span></div>
   </header>
 
-  <section class="model">
-    <div class="model-head">
-      <div class="model-name"><span class="dot btc"></span>Sixcents</div>
-      <div class="model-product">BTC-USD</div>
-    </div>
-    <iframe id="btcFrame" title="Sixcents Bitcoin forecast" src="sixcents.html" scrolling="no"></iframe>
+  <section class="dashboard">
+    <article class="forecast-card btc" data-engine="btc">
+      <div class="card-head">
+        <div class="asset">
+          <div class="asset-icon">₿</div>
+          <div><div class="asset-name">Bitcoin</div><div class="asset-sub">BTC / USD · SIXCENTS</div></div>
+        </div>
+        <div class="model-state" data-bind="state">STARTING</div>
+      </div>
+      <div class="card-body">
+        <div class="label">Predicted 15-minute close</div>
+        <div class="predicted" data-bind="predicted">—</div>
+        <div class="direction-row">
+          <div class="direction pending" data-bind="direction">CALIBRATING…</div>
+          <div class="window-chip" data-bind="window">—</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="label">Locked start</div><div class="metric-value" data-bind="locked">—</div></div>
+          <div class="metric"><div class="label">Live price</div><div class="metric-value" data-bind="live">—</div></div>
+          <div class="metric"><div class="label">Time remaining</div><div class="metric-value" data-bind="countdown">—</div></div>
+          <div class="metric"><div class="label">Signal score</div><div class="metric-value" data-bind="score">—</div></div>
+        </div>
+      </div>
+      <div class="card-foot">
+        <div class="status-text" data-bind="status">Loading historical calibration…</div>
+        <button class="recalibrate" type="button" data-action="recalibrate">Re-run</button>
+      </div>
+    </article>
+
+    <article class="forecast-card eth" data-engine="eth">
+      <div class="card-head">
+        <div class="asset">
+          <div class="asset-icon">Ξ</div>
+          <div><div class="asset-name">Ethereum</div><div class="asset-sub">ETH / USD · BANDJOVI</div></div>
+        </div>
+        <div class="model-state" data-bind="state">STARTING</div>
+      </div>
+      <div class="card-body">
+        <div class="label">Predicted 15-minute close</div>
+        <div class="predicted" data-bind="predicted">—</div>
+        <div class="direction-row">
+          <div class="direction pending" data-bind="direction">CALIBRATING…</div>
+          <div class="window-chip" data-bind="window">—</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="label">Locked start</div><div class="metric-value" data-bind="locked">—</div></div>
+          <div class="metric"><div class="label">Live price</div><div class="metric-value" data-bind="live">—</div></div>
+          <div class="metric"><div class="label">Time remaining</div><div class="metric-value" data-bind="countdown">—</div></div>
+          <div class="metric"><div class="label">Signal score</div><div class="metric-value" data-bind="score">—</div></div>
+        </div>
+      </div>
+      <div class="card-foot">
+        <div class="status-text" data-bind="status">Loading historical calibration…</div>
+        <button class="recalibrate" type="button" data-action="recalibrate">Re-run</button>
+      </div>
+    </article>
+
+    <article class="forecast-card doge" data-engine="doge">
+      <div class="card-head">
+        <div class="asset">
+          <div class="asset-icon">Ð</div>
+          <div><div class="asset-name">Dogecoin</div><div class="asset-sub">DOGE / USD · SOLSISTER</div></div>
+        </div>
+        <div class="model-state" data-bind="state">STARTING</div>
+      </div>
+      <div class="card-body">
+        <div class="label">Predicted 15-minute close</div>
+        <div class="predicted" data-bind="predicted">—</div>
+        <div class="direction-row">
+          <div class="direction pending" data-bind="direction">CALIBRATING…</div>
+          <div class="window-chip" data-bind="window">—</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="label">Locked start</div><div class="metric-value" data-bind="locked">—</div></div>
+          <div class="metric"><div class="label">Live price</div><div class="metric-value" data-bind="live">—</div></div>
+          <div class="metric"><div class="label">Time remaining</div><div class="metric-value" data-bind="countdown">—</div></div>
+          <div class="metric"><div class="label">Signal score</div><div class="metric-value" data-bind="score">—</div></div>
+        </div>
+      </div>
+      <div class="card-foot">
+        <div class="status-text" data-bind="status">Loading historical calibration…</div>
+        <button class="recalibrate" type="button" data-action="recalibrate">Re-run</button>
+      </div>
+    </article>
   </section>
 
-  <section class="model">
-    <div class="model-head">
-      <div class="model-name"><span class="dot eth"></span>Bandjovi</div>
-      <div class="model-product">ETH-USD</div>
-    </div>
-    <iframe id="ethFrame" title="Bandjovi Ethereum forecast" src="bandjovi.html" scrolling="no"></iframe>
-  </section>
-
-  <section class="model">
-    <div class="model-head">
-      <div class="model-name"><span class="dot doge"></span>Solsister</div>
-      <div class="model-product">DOGE-USD</div>
-    </div>
-    <iframe id="dogeFrame" title="Solsister Dogecoin forecast" src="solsister.html" scrolling="no"></iframe>
-  </section>
-
-  <div class="footer">Each model keeps its own history, calibration and prediction storage.</div>
+  <div class="note">Each asset keeps its own calibration, model state, local prediction history and Coinbase market-data logic. The unified dashboard only mirrors the engines' live output.</div>
 </main>
+
+<iframe id="btcEngine" class="engine-frame" src="sixcents.html" title="BTC forecast engine" aria-hidden="true"></iframe>
+<iframe id="ethEngine" class="engine-frame" src="bandjovi.html" title="ETH forecast engine" aria-hidden="true"></iframe>
+<iframe id="dogeEngine" class="engine-frame" src="solsister.html" title="DOGE forecast engine" aria-hidden="true"></iframe>
+
 <script>
 (function(){
-  var frames=[
-    document.getElementById('btcFrame'),
-    document.getElementById('ethFrame'),
-    document.getElementById('dogeFrame')
-  ];
+  "use strict";
 
-  function fit(frame){
+  var config={
+    btc:{
+      frame:"btcEngine",
+      ids:{predicted:"predictedPrice",direction:"prediction",locked:"lockedPrice",live:"livePrice",window:"windowTime",countdown:"countdown",score:"signalScore",status:"heroStatus",state:"backtestStatus"},
+      button:"rerunBtn"
+    },
+    eth:{
+      frame:"ethEngine",
+      ids:{predicted:"predictedPrice",direction:"directionPill",locked:"lockedPrice",live:"livePrice",window:"windowLabel",countdown:"countdown",score:"signalScore",status:"statusSub",state:"statusMain"},
+      button:"recalibrateBtn"
+    },
+    doge:{
+      frame:"dogeEngine",
+      ids:{predicted:"predictedPrice",direction:"direction",locked:"lockedPrice",live:"livePrice",window:"windowLabel",countdown:"countdown",score:"signalScore",status:"statusText",state:"statusTitle"},
+      button:"recalibrateBtn"
+    }
+  };
+
+  function textOf(doc,id){
+    var node=doc && doc.getElementById(id);
+    return node ? (node.textContent || "").trim() : "";
+  }
+
+  function output(card,key,value){
+    var node=card.querySelector('[data-bind="'+key+'"]');
+    if(!node || !value) return;
+    node.textContent=value;
+    if(key==="direction"){
+      var v=value.toLowerCase();
+      node.className="direction "+(v.indexOf("higher")!==-1?"higher":v.indexOf("lower")!==-1?"lower":"pending");
+    }
+  }
+
+  function syncEngine(name){
+    var c=config[name];
+    var frame=document.getElementById(c.frame);
+    var card=document.querySelector('[data-engine="'+name+'"]');
+    if(!frame || !card) return false;
     try{
       var doc=frame.contentDocument || frame.contentWindow.document;
-      if(!doc) return;
-      var body=doc.body;
-      var html=doc.documentElement;
-      if(!body || !html) return;
-      var h=Math.max(
-        body.scrollHeight, body.offsetHeight,
-        html.clientHeight, html.scrollHeight, html.offsetHeight
-      );
-      if(h>200) frame.style.height=(h+4)+'px';
-    }catch(e){}
+      if(!doc || !doc.body) return false;
+      for(var key in c.ids){
+        if(Object.prototype.hasOwnProperty.call(c.ids,key)){
+          var value=textOf(doc,c.ids[key]);
+          if(value) output(card,key,value);
+        }
+      }
+      return true;
+    }catch(e){
+      return false;
+    }
   }
 
-  function fitAll(){
-    for(var i=0;i<frames.length;i++) fit(frames[i]);
+  function syncAll(){
+    var ready=0;
+    if(syncEngine("btc")) ready++;
+    if(syncEngine("eth")) ready++;
+    if(syncEngine("doge")) ready++;
+    var label=document.getElementById("syncLabel");
+    if(label) label.textContent=ready===3?"3 engines live":ready+" of 3 engines live";
   }
 
-  for(var i=0;i<frames.length;i++){
-    (function(frame){
-      frame.addEventListener('load',function(){
-        fit(frame);
-        setTimeout(function(){fit(frame)},300);
-        setTimeout(function(){fit(frame)},1200);
-        setTimeout(function(){fit(frame)},3500);
-      });
-    })(frames[i]);
-  }
+  document.addEventListener("click",function(e){
+    var btn=e.target.closest ? e.target.closest("[data-action='recalibrate']") : null;
+    if(!btn) return;
+    var card=btn.closest("[data-engine]");
+    if(!card) return;
+    var name=card.getAttribute("data-engine");
+    var c=config[name];
+    var frame=document.getElementById(c.frame);
+    try{
+      var doc=frame.contentDocument || frame.contentWindow.document;
+      var original=doc.getElementById(c.button);
+      if(original){
+        original.click();
+        btn.textContent="Running…";
+        setTimeout(function(){btn.textContent="Re-run"},1800);
+      }
+    }catch(ignore){}
+  });
 
-  window.addEventListener('resize',function(){setTimeout(fitAll,120)});
-  setInterval(fitAll,2500);
+  ["btcEngine","ethEngine","dogeEngine"].forEach(function(id){
+    var frame=document.getElementById(id);
+    frame.addEventListener("load",function(){
+      syncAll();
+      setTimeout(syncAll,250);
+      setTimeout(syncAll,1200);
+    });
+  });
+
+  syncAll();
+  setInterval(syncAll,500);
 })();
 </script>
 </body>
