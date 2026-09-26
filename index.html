@@ -55,6 +55,19 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
   background:linear-gradient(180deg,rgba(17,24,36,.98),rgba(9,14,22,.98));
   box-shadow:var(--shadow);
 }
+.leader-slot{
+  height:30px;display:flex;align-items:center;justify-content:center;
+  border-bottom:1px solid rgba(255,255,255,.035)
+}
+.leader-star{
+  visibility:hidden;opacity:0;transform:scale(.72);
+  color:#ffd54a;font-size:21px;line-height:1;
+  text-shadow:0 0 12px rgba(255,213,74,.62),0 2px 8px rgba(0,0,0,.4);
+  transition:opacity .2s ease,transform .2s ease
+}
+.forecast-card.session-leader .leader-star{
+  visibility:visible;opacity:1;transform:scale(1)
+}
 .forecast-card:before{
   content:"";position:absolute;width:190px;height:190px;right:-70px;top:-90px;border-radius:50%;
   pointer-events:none;opacity:.17
@@ -198,6 +211,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 
   <section class="dashboard">
     <article class="forecast-card btc" data-engine="btc">
+      <div class="leader-slot"><span class="leader-star" aria-hidden="true">★</span></div>
       <div class="card-head">
         <div class="asset">
           <div class="asset-icon">₿</div>
@@ -228,6 +242,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     </article>
 
     <article class="forecast-card eth" data-engine="eth">
+      <div class="leader-slot"><span class="leader-star" aria-hidden="true">★</span></div>
       <div class="card-head">
         <div class="asset">
           <div class="asset-icon">Ξ</div>
@@ -258,6 +273,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     </article>
 
     <article class="forecast-card doge" data-engine="doge">
+      <div class="leader-slot"><span class="leader-star" aria-hidden="true">★</span></div>
       <div class="card-head">
         <div class="asset">
           <div class="asset-icon">Ð</div>
@@ -288,6 +304,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     </article>
 
     <article class="forecast-card near" data-engine="near">
+      <div class="leader-slot"><span class="leader-star" aria-hidden="true">★</span></div>
       <div class="card-head">
         <div class="asset">
           <div class="asset-icon">N</div>
@@ -419,6 +436,51 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     }catch(e){ return []; }
   }
 
+  var ledgerKeys={
+    btc:"sixcents_predictions_v3",
+    eth:"sixcents_eth_predictions_v1",
+    doge:"doge_predictions_v2",
+    near:"near_predictions_v1"
+  };
+
+  function winCount(key){
+    return ledgerRows(key).filter(function(row){return row.result==="WIN";}).length;
+  }
+
+  // Snapshot settled wins at page load. Only wins added after this point count
+  // toward the current-run leader; refreshing starts a new run.
+  var sessionWinBaseline={
+    btc:winCount(ledgerKeys.btc),
+    eth:winCount(ledgerKeys.eth),
+    doge:winCount(ledgerKeys.doge),
+    near:winCount(ledgerKeys.near)
+  };
+
+  function updateSessionLeader(sources){
+    var coins=["btc","eth","doge","near"];
+    var runWins={};
+    var maxWins=0;
+
+    coins.forEach(function(coin){
+      var totalWins=sources[coin].filter(function(row){return row.result==="WIN";}).length;
+      var added=Math.max(0,totalWins-sessionWinBaseline[coin]);
+      runWins[coin]=added;
+      if(added>maxWins) maxWins=added;
+    });
+
+    coins.forEach(function(coin){
+      var card=document.querySelector('[data-engine="'+coin+'"]');
+      if(!card) return;
+      var isLeader=maxWins>0 && runWins[coin]===maxWins;
+      card.classList.toggle("session-leader",isLeader);
+      var star=card.querySelector(".leader-star");
+      if(star){
+        star.setAttribute("aria-hidden",isLeader?"false":"true");
+        star.title=isLeader ? "Current run leader · "+runWins[coin]+" win"+(runWins[coin]===1?"":"s") : "";
+      }
+    });
+  }
+
   function formatRecordTime(ms){
     var d=new Date(Number(ms));
     if(!Number.isFinite(d.getTime())) return "";
@@ -427,11 +489,13 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 
   function renderRecords(){
     var sources={
-      btc:ledgerRows("sixcents_predictions_v3"),
-      eth:ledgerRows("sixcents_eth_predictions_v1"),
-      doge:ledgerRows("doge_predictions_v2"),
-      near:ledgerRows("near_predictions_v1")
+      btc:ledgerRows(ledgerKeys.btc),
+      eth:ledgerRows(ledgerKeys.eth),
+      doge:ledgerRows(ledgerKeys.doge),
+      near:ledgerRows(ledgerKeys.near)
     };
+    updateSessionLeader(sources);
+
     var byCoin={btc:{},eth:{},doge:{},near:{}};
     var times={};
     ["btc","eth","doge","near"].forEach(function(coin){
