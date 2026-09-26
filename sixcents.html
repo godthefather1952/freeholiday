@@ -625,7 +625,7 @@
       "Calibration: "+dateShort(model.trainStart)+" → "+dateShort(model.trainEnd)+
       ". Out-of-sample verification: "+dateShort(model.testStart)+" → "+dateShort(model.testEnd)+
       ". The split is chronological and the verification segment is never used to fit the probability curve.";
-    setProgress(100,"Calibration complete. Probability model is frozen from the 70% in-sample segment.");
+    setProgress(100,"Calibration complete. 60% trained the model, 20% selected the Tight cutoff, and the newest 20% was held out.");
   }
 
   async function makeLockedPrediction(){
@@ -771,7 +771,7 @@
       setProgress(52,"Building strictly past-only features for each 15-minute window…");
       await sleep(30);
       calibrate(candles);
-      setProgress(88,"Running the frozen model over the 30% out-of-sample segment…");
+      setProgress(88,"Selecting the Tight cutoff on the middle 20% and verifying it on the newest untouched 20%…");
       await sleep(30);
       renderModel();
       busy=false;
