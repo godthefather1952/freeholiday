@@ -143,7 +143,8 @@
     <div class="value">Recent locked windows on this device</div>
     <div id="history" class="small" style="margin-top:8px">No completed local predictions yet.</div>
   </section>
-<div id="tightThreshold" style="display:none">—</div><div id="tightCoverage" style="display:none">—</div>\n</main>
+<div id="tightThreshold" style="display:none">—</div><div id="tightCoverage" style="display:none">—</div>
+</main>
 
 <script>
 (function(){
@@ -617,7 +618,9 @@
     el("trainWindows").textContent=model.train.toLocaleString();
     el("testWindows").textContent=model.test.toLocaleString();
     el("oosAccuracy").textContent=fmtPct(model.tightAccuracy,1);
-    el("brier").textContent=model.brier.toFixed(3);\n    el("tightThreshold").textContent=fmtPct(model.tightThreshold,1);\n    el("tightCoverage").textContent=fmtPct(model.tightCoverage,1);
+    el("brier").textContent=model.brier.toFixed(3);
+    el("tightThreshold").textContent=fmtPct(model.tightThreshold,1);
+    el("tightCoverage").textContent=fmtPct(model.tightCoverage,1);
     el("rangeText").textContent=
       "Calibration: "+dateShort(model.trainStart)+" → "+dateShort(model.trainEnd)+
       ". Out-of-sample verification: "+dateShort(model.testStart)+" → "+dateShort(model.testEnd)+
