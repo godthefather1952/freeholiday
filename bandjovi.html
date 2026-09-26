@@ -150,7 +150,8 @@
     </section>
 
     <div class="foot">Statistical ETH/USD forecast derived from historical Coinbase Exchange candles. Forecasts are estimates, not guarantees.</div>
-  <div id="tightThreshold" style="display:none">—</div><div id="tightCoverage" style="display:none">—</div>\n</main>
+  <div id="tightThreshold" style="display:none">—</div><div id="tightCoverage" style="display:none">—</div>
+</main>
 
   <script>
   (function(){
@@ -469,7 +470,9 @@
       el.calWindows.textContent=m.calibrationCount.toLocaleString();
       el.verWindows.textContent=m.verificationCount.toLocaleString();
       el.oosAccuracy.textContent=fmtPct(m.tightAccuracy,1);
-      el.brier.textContent=Number.isFinite(m.brier)?m.brier.toFixed(3):'—';\n      document.getElementById('tightThreshold').textContent=fmtPct(m.tightThreshold,1);\n      document.getElementById('tightCoverage').textContent=fmtPct(m.tightCoverage,1);
+      el.brier.textContent=Number.isFinite(m.brier)?m.brier.toFixed(3):'—';
+      document.getElementById('tightThreshold').textContent=fmtPct(m.tightThreshold,1);
+      document.getElementById('tightCoverage').textContent=fmtPct(m.tightCoverage,1);
       el.coeffs.textContent='a '+m.a.toFixed(4)+' · b '+m.b.toFixed(4);
       el.calRange.textContent=fmtDate(m.calStart)+' → '+fmtDate(m.calEnd);
       el.verRange.textContent=fmtDate(m.verStart)+' → '+fmtDate(m.verEnd);
