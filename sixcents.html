@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>Sixcents BTC Quarter-Hour Model</title>
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#0b1020;--panel:#111827;--panel2:#182033;--text:#f3f4f6;
+      --muted:#9ca3af;--line:#273244;--up:#34d399;--down:#fb7185;
+      --neutral:#fbbf24;--accent:#60a5fa;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    main{max-width:760px;margin:0 auto;padding:16px 14px 30px}
+    h1{margin:0 0 4px;font-size:1.45rem}
+    .sub{color:var(--muted);font-size:.9rem;line-height:1.45;margin-bottom:14px}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0}
+    .hero{text-align:center;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:19px 12px}
+    .predicted-price{font-size:2.45rem;font-weight:850;letter-spacing:.01em;margin:5px 0 8px}
+    .prediction{font-size:1.65rem;font-weight:850;letter-spacing:.01em;margin:5px 0 2px}
+    .prediction.higher{color:var(--up)}
+    .prediction.lower{color:var(--down)}
+    .prediction.loading{color:var(--neutral)}
+    .label{color:var(--muted);font-size:.78rem;margin-bottom:4px}
+    .value{font-size:1.04rem;font-weight:750;overflow-wrap:anywhere}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    .metric{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:11px;min-width:0}
+    .row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    .status{color:var(--muted);font-size:.86rem;line-height:1.4}
+    .progress{height:8px;border-radius:999px;background:#202a3d;overflow:hidden;margin-top:10px}
+    .progress>div{height:100%;width:0%;background:var(--accent);transition:width .2s ease}
+    button{min-height:44px;border:0;border-radius:12px;padding:0 15px;font-size:.96rem;font-weight:750;background:var(--accent);color:#07111f}
+    button:disabled{opacity:.55}
+    .error{display:none;color:#fecaca;background:#3f1720;border:1px solid #7f1d1d;padding:10px;border-radius:10px;margin-top:10px;font-size:.86rem;line-height:1.4}
+    .ok{color:var(--up)}
+    .warn{color:var(--neutral)}
+    table{width:100%;border-collapse:collapse;font-size:.84rem}
+    th,td{text-align:left;border-bottom:1px solid var(--line);padding:8px 5px;vertical-align:top}
+    th{color:var(--muted);font-weight:650}
+    .small{color:var(--muted);font-size:.78rem;line-height:1.5}
+    .pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 8px;font-size:.73rem;color:var(--muted);margin:3px 3px 0 0}
+    .history-item{display:grid;grid-template-columns:1.1fr .8fr .8fr;gap:7px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.8rem}
+    .history-item:last-child{border-bottom:0}
+    @media(max-width:420px){
+      .grid{grid-template-columns:1fr 1fr}
+      main{padding-left:10px;padding-right:10px}
+      .prediction{font-size:2rem}
+      .history-item{grid-template-columns:1fr 1fr}
+      .history-item span:last-child{grid-column:1/-1}
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Sixcents — BTC 15-Minute Model</h1>
+  <div class="sub">Quarter-hour predictions are locked to :00, :15, :30 and :45. Each prediction asks one question: will BTC/USD finish the 15-minute window above or below the price locked at the window start?</div>
+
+  <section class="card">
+    <div class="hero">
+      <div class="label" id="heroLabel">Predicted 15-minute close</div>
+      <div id="predictedPrice" class="predicted-price">—</div>
+      <div class="label">Direction & calibrated confidence</div>
+      <div id="prediction" class="prediction loading">CALIBRATING…</div>
+      <div id="heroStatus" class="status">Loading historical data and fitting the probability model.</div>
+    </div>
+    <div class="grid">
+      <div class="metric">
+        <div class="label">Locked start price</div>
+        <div id="lockedPrice" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">Live BTC/USD</div>
+        <div id="livePrice" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">Window</div>
+        <div id="windowTime" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">Time remaining</div>
+        <div id="countdown" class="value">—</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div>
+        <div class="value">Automated historical calibration</div>
+        <div id="backtestStatus" class="status">Preparing 90 days of 15-minute BTC/USD candles…</div>
+      </div>
+      <button id="rerunBtn" type="button">Re-run</button>
+    </div>
+    <div class="progress" aria-label="Backtest progress"><div id="progressBar"></div></div>
+    <div id="error" class="error"></div>
+    <div class="grid">
+      <div class="metric">
+        <div class="label">Historical windows</div>
+        <div id="totalWindows" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">70% calibration</div>
+        <div id="trainWindows" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">30% out-of-sample</div>
+        <div id="testWindows" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">OOS directional accuracy</div>
+        <div id="oosAccuracy" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">OOS Brier score</div>
+        <div id="brier" class="value">—</div>
+      </div>
+      <div class="metric">
+        <div class="label">Model score</div>
+        <div id="signalScore" class="value">—</div>
+      </div>
+    </div>
+    <p class="small" id="rangeText">The split is chronological, not randomized. The model is fitted only on the first 70% and then frozen before the last 30% is evaluated.</p>
+  </section>
+
+  <section class="card">
+    <div class="value">No-look-ahead design</div>
+    <p class="small">For historical window <strong>i</strong>, the locked price is that 15-minute candle's open and every indicator is calculated only from candles that ended before window <strong>i</strong> began. The candle's close is used only afterward as the Higher/Lower outcome. The 70/30 split occurs on a clean quarter-hour boundary, and the 30% verification segment never participates in calibration.</p>
+    <div>
+      <span class="pill">EMA 9 / 21</span>
+      <span class="pill">MACD 12 / 26 / 9</span>
+      <span class="pill">RSI 14</span>
+      <span class="pill">1-hour rolling VWAP</span>
+      <span class="pill">Bollinger %B</span>
+      <span class="pill">15m momentum</span>
+      <span class="pill">Volume confirmation</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="value">Recent locked windows on this device</div>
+    <div id="history" class="small" style="margin-top:8px">No completed local predictions yet.</div>
+  </section>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  var PRODUCT = "BTC-USD";
+  var API = "https://api.exchange.coinbase.com";
+  var BAR_MS = 15 * 60 * 1000;
+  var HISTORY_DAYS = 90;
+  var MIN_WINDOWS = 3000;
+  var MAX_WINDOWS = 10000;
+  var CACHE_KEY = "sixcents_history_v3";
+  var CACHE_TTL = 6 * 60 * 60 * 1000;
+  var PRED_KEY = "sixcents_predictions_v3";
+
+  var model = null;
+  var completedCandles = [];
+  var currentPrediction = null;
+  var busy = false;
+
+  function el(id){ return document.getElementById(id); }
+  function sleep(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
+  function clamp(n,a,b){ return Math.max(a,Math.min(b,n)); }
+  function fmtMoney(n){
+    return Number.isFinite(n) ? n.toLocaleString(undefined,{style:"currency",currency:"USD",maximumFractionDigits:2}) : "—";
+  }
+  function fmtPct(n,d){
+    return Number.isFinite(n) ? (n*100).toFixed(d == null ? 1 : d) + "%" : "—";
+  }
+  function intervalStartMs(ts){ return Math.floor(ts / BAR_MS) * BAR_MS; }
+  function iso(ms){ return new Date(ms).toISOString(); }
+  function timeOnly(ms){
+    return new Date(ms).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+  }
+  function dateShort(ms){
+    return new Date(ms).toLocaleDateString([], {month:"short",day:"numeric"});
+  }
+  function setError(msg){
+    var e = el("error");
+    e.textContent = msg || "";
+    e.style.display = msg ? "block" : "none";
+  }
+  function setProgress(p,label){
+    el("progressBar").style.width = clamp(p,0,100).toFixed(0) + "%";
+    if(label) el("backtestStatus").textContent = label;
+  }
+
+  function emaSeries(values, period){
+    if(values.length < period) return [];
+    var k = 2/(period+1), out=[], sum=0, prev;
+    for(var i=0;i<period;i++) sum += values[i];
+    prev = sum/period;
+    for(var j=0;j<values.length;j++){
+      if(j < period-1) out.push(NaN);
+      else if(j === period-1) out.push(prev);
+      else{
+        prev = values[j]*k + prev*(1-k);
+        out.push(prev);
+      }
+    }
+    return out;
+  }
+
+  function rsi(values, period){
+    period = period || 14;
+    if(values.length < period+1) return NaN;
+    var gains=0, losses=0, i, d;
+    for(i=1;i<=period;i++){
+      d=values[i]-values[i-1];
+      gains += Math.max(d,0);
+      losses += Math.max(-d,0);
+    }
+    var avgGain=gains/period, avgLoss=losses/period;
+    for(i=period+1;i<values.length;i++){
+      d=values[i]-values[i-1];
+      avgGain=(avgGain*(period-1)+Math.max(d,0))/period;
+      avgLoss=(avgLoss*(period-1)+Math.max(-d,0))/period;
+    }
+    if(avgLoss===0) return 100;
+    var rs=avgGain/avgLoss;
+    return 100-(100/(1+rs));
+  }
+
+  function macd(values){
+    var fast=emaSeries(values,12), slow=emaSeries(values,26), line=[];
+    for(var i=0;i<values.length;i++){
+      line.push(Number.isFinite(fast[i]) && Number.isFinite(slow[i]) ? fast[i]-slow[i] : NaN);
+    }
+    var valid=line.filter(Number.isFinite);
+    var sig=emaSeries(valid,9);
+    var m=valid.length ? valid[valid.length-1] : NaN;
+    var s=sig.length ? sig[sig.length-1] : NaN;
+    return {line:m, signal:s, hist:m-s};
+  }
+
+  function bollinger(values, period){
+    period=period||20;
+    if(values.length<period) return {pctB:NaN};
+    var s=values.slice(-period), mean=0, i;
+    for(i=0;i<s.length;i++) mean+=s[i];
+    mean/=period;
+    var variance=0;
+    for(i=0;i<s.length;i++) variance += Math.pow(s[i]-mean,2);
+    variance/=period;
+    var sd=Math.sqrt(variance), upper=mean+2*sd, lower=mean-2*sd;
+    var price=values[values.length-1];
+    return {pctB: upper===lower ? 0.5 : (price-lower)/(upper-lower)};
+  }
+
+  function rollingVWAP(candles){
+    var pv=0, vol=0;
+    for(var i=0;i<candles.length;i++){
+      var c=candles[i];
+      var typical=(c.high+c.low+c.close)/3;
+      pv += typical*c.volume;
+      vol += c.volume;
+    }
+    return vol>0 ? pv/vol : NaN;
+  }
+
+  function computeSignal(history){
+    if(history.length < 40) return null;
+    var h=history.slice(-80);
+    var closes=h.map(function(c){ return c.close; });
+    var ema9s=emaSeries(closes,9), ema21s=emaSeries(closes,21);
+    var ema9=ema9s[ema9s.length-1], ema21=ema21s[ema21s.length-1];
+    var m=macd(closes);
+    var r=rsi(closes,14);
+    var bb=bollinger(closes,20);
+    var last=h[h.length-1], prev=h[h.length-2];
+    var vwap=rollingVWAP(h.slice(-4));
+    var mom=((last.close/prev.close)-1)*100;
+
+    var priorVol=h.slice(-5,-1);
+    var avgVol=0;
+    for(var i=0;i<priorVol.length;i++) avgVol+=priorVol[i].volume;
+    avgVol=priorVol.length ? avgVol/priorVol.length : 0;
+    var volRatio=avgVol>0 ? last.volume/avgVol : 1;
+
+    var score=0;
+    score += ema9>ema21 ? 2 : ema9<ema21 ? -2 : 0;
+    score += m.hist>0 ? 2 : m.hist<0 ? -2 : 0;
+    score += r>=55 ? 1 : r<=45 ? -1 : 0;
+    score += last.close>vwap ? 1 : last.close<vwap ? -1 : 0;
+    score += bb.pctB>0.55 ? 1 : bb.pctB<0.45 ? -1 : 0;
+    score += mom>0.05 ? 1 : mom<-0.05 ? -1 : 0;
+    if(volRatio>=1.20) score += mom>0 ? 1 : mom<0 ? -1 : 0;
+
+    return {
+      score:score,
+      ema9:ema9,
+      ema21:ema21,
+      macdHist:m.hist,
+      rsi:r,
+      vwap:vwap,
+      pctB:bb.pctB,
+      momentum:mom,
+      volumeRatio:volRatio
+    };
+  }
+
+  function sigmoid(z){
+    if(z>=0){
+      var ez=Math.exp(-z);
+      return 1/(1+ez);
+    }
+    var e=Math.exp(z);
+    return e/(1+e);
+  }
+
+  function fitLogistic(samples){
+    var positives=0;
+    for(var i=0;i<samples.length;i++) positives += samples[i].y;
+    var mean=clamp(positives/samples.length,0.001,0.999);
+    var a=Math.log(mean/(1-mean));
+    var b=0;
+    var ridge=0.01;
+
+    for(var iter=0;iter<60;iter++){
+      var g0=0,g1=0,h00=0,h01=0,h11=ridge;
+      for(i=0;i<samples.length;i++){
+        var x=samples[i].score, y=samples[i].y;
+        var p=sigmoid(a+b*x);
+        var w=Math.max(1e-8,p*(1-p));
+        g0 += p-y;
+        g1 += (p-y)*x;
+        h00 += w;
+        h01 += w*x;
+        h11 += w*x*x;
+      }
+      g1 += ridge*b;
+      var det=h00*h11-h01*h01;
+      if(!Number.isFinite(det) || Math.abs(det)<1e-12) break;
+      var da=(h11*g0-h01*g1)/det;
+      var db=(-h01*g0+h00*g1)/det;
+      a -= da;
+      b -= db;
+      if(Math.abs(da)+Math.abs(db)<1e-8) break;
+    }
+    return {a:a,b:b};
+  }
+
+  function probabilityHigher(score,m){
+    return clamp(sigmoid(m.a+m.b*score),0.001,0.999);
+  }
+
+  function median(values){
+    if(!values.length) return NaN;
+    var s=values.slice().sort(function(a,b){return a-b;});
+    var mid=Math.floor(s.length/2);
+    return s.length%2 ? s[mid] : (s[mid-1]+s[mid])/2;
+  }
+
+  function fitMoveModel(train){
+    var byScore={};
+    for(var target=-9;target<=9;target++){
+      var nearby=train.filter(function(x){return Math.abs(x.score-target)<=1;});
+      if(nearby.length<30){
+        nearby=train.filter(function(x){return Math.abs(x.score-target)<=2;});
+      }
+      if(nearby.length<20) nearby=train;
+      var mags=nearby.map(function(x){return Math.abs(x.logReturn);}).filter(Number.isFinite);
+      byScore[target]=clamp(median(mags),0.00001,0.03);
+    }
+    return byScore;
+  }
+
+  function moveMagnitude(score,m){
+    var key=String(Math.round(clamp(score,-9,9)));
+    var v=m.moveByScore && Number(m.moveByScore[key]);
+    return Number.isFinite(v) ? v : 0.001;
+  }
+
+  function evaluate(samples,m){
+    var correct=0,brier=0;
+    for(var i=0;i<samples.length;i++){
+      var p=probabilityHigher(samples[i].score,m);
+      var pred=p>=0.5 ? 1 : 0;
+      if(pred===samples[i].y) correct++;
+      brier += Math.pow(p-samples[i].y,2);
+    }
+    return {
+      accuracy:samples.length ? correct/samples.length : NaN,
+      brier:samples.length ? brier/samples.length : NaN
+    };
+  }
+
+  async function apiJSON(path){
+    var res=await fetch(API+path,{cache:"no-store",headers:{"Accept":"application/json"}});
+    if(!res.ok) throw new Error("Coinbase market-data request failed ("+res.status+").");
+    return res.json();
+  }
+
+  function parseCandleRow(r){
+    return {
+      time:Number(r[0])*1000,
+      low:Number(r[1]),
+      high:Number(r[2]),
+      open:Number(r[3]),
+      close:Number(r[4]),
+      volume:Number(r[5])
+    };
+  }
+
+  async function fetchHistorical90d(force){
+    var now=Date.now();
+    if(!force){
+      try{
+        var cached=JSON.parse(localStorage.getItem(CACHE_KEY)||"null");
+        if(cached && now-cached.savedAt<CACHE_TTL && Array.isArray(cached.candles) && cached.candles.length>4000){
+          setProgress(45,"Using cached historical candles…");
+          return cached.candles;
+        }
+      }catch(e){}
+    }
+
+    var currentStart=intervalStartMs(now);
+    var end=currentStart;
+    var start=currentStart-HISTORY_DAYS*24*60*60*1000;
+    var chunkBars=299;
+    var totalSpan=end-start;
+    var all=new Map();
+    var cursor=start;
+    var requestNo=0;
+    var totalReq=Math.ceil(totalSpan/(chunkBars*BAR_MS));
+
+    while(cursor<=end){
+      var chunkEnd=Math.min(end,cursor+chunkBars*BAR_MS);
+      var path="/products/"+PRODUCT+"/candles?granularity=900&start="+encodeURIComponent(iso(cursor))+"&end="+encodeURIComponent(iso(chunkEnd));
+      var rows=await apiJSON(path);
+      for(var i=0;i<rows.length;i++){
+        var c=parseCandleRow(rows[i]);
+        if(Number.isFinite(c.time) && c.time>=start && c.time<=end) all.set(c.time,c);
+      }
+      requestNo++;
+      setProgress(5+40*(requestNo/Math.max(1,totalReq)),"Downloading 90-day history: "+requestNo+" / "+totalReq+" chunks");
+      cursor=chunkEnd+BAR_MS;
+      await sleep(140);
+    }
+
+    var candles=Array.from(all.values()).sort(function(a,b){return a.time-b.time;});
+    try{
+      localStorage.setItem(CACHE_KEY,JSON.stringify({savedAt:now,candles:candles}));
+    }catch(e){}
+    return candles;
+  }
+
+  function buildSamples(candles,currentStart){
+    var done=candles.filter(function(c){return c.time<currentStart;}).sort(function(a,b){return a.time-b.time;});
+    var samples=[];
+    for(var i=40;i<done.length;i++){
+      var current=done[i];
+      var prior=done.slice(Math.max(0,i-80),i);
+      var signal=computeSignal(prior);
+      if(!signal) continue;
+      if(current.close===current.open) continue;
+      samples.push({
+        time:current.time,
+        score:signal.score,
+        y:current.close>current.open ? 1 : 0,
+        open:current.open,
+        close:current.close,
+        logReturn:Math.log(current.close/current.open)
+      });
+    }
+    if(samples.length>MAX_WINDOWS) samples=samples.slice(-MAX_WINDOWS);
+    return {samples:samples,done:done};
+  }
+
+  function calibrate(candles){
+    var currentStart=intervalStartMs(Date.now());
+    var built=buildSamples(candles,currentStart);
+    var samples=built.samples;
+    completedCandles=built.done;
+
+    if(samples.length<MIN_WINDOWS){
+      throw new Error("Only "+samples.length+" usable historical windows were available. At least "+MIN_WINDOWS+" are required.");
+    }
+
+    var split=Math.floor(samples.length*0.70);
+    split=clamp(split,1,samples.length-1);
+    var train=samples.slice(0,split);
+    var test=samples.slice(split);
+    var fitted=fitLogistic(train);
+    var moveByScore=fitMoveModel(train);
+    var metrics=evaluate(test,fitted);
+
+    model={
+      a:fitted.a,
+      b:fitted.b,
+      moveByScore:moveByScore,
+      samples:samples.length,
+      train:train.length,
+      test:test.length,
+      accuracy:metrics.accuracy,
+      brier:metrics.brier,
+      trainStart:train[0].time,
+      trainEnd:train[train.length-1].time,
+      testStart:test[0].time,
+      testEnd:test[test.length-1].time
+    };
+    return model;
+  }
+
+  async function fetchCurrentAndRecent(){
+    var now=Date.now();
+    var start=intervalStartMs(now);
+    var from=start-6*60*60*1000;
+    var path="/products/"+PRODUCT+"/candles?granularity=900&start="+encodeURIComponent(iso(from))+"&end="+encodeURIComponent(iso(now));
+    var rows=await apiJSON(path);
+    var candles=rows.map(parseCandleRow).sort(function(a,b){return a.time-b.time;});
+    return {start:start,candles:candles};
+  }
+
+  async function fetchTicker(){
+    var t=await apiJSON("/products/"+PRODUCT+"/ticker");
+    return Number(t.price);
+  }
+
+  function loadPredictionHistory(){
+    try{
+      var h=JSON.parse(localStorage.getItem(PRED_KEY)||"[]");
+      return Array.isArray(h)?h:[];
+    }catch(e){ return []; }
+  }
+
+  function savePredictionHistory(h){
+    try{ localStorage.setItem(PRED_KEY,JSON.stringify(h.slice(-30))); }catch(e){}
+  }
+
+  function settlePreviousIfPossible(startPrice,newStartPrice,newStart){
+    var h=loadPredictionHistory();
+    if(!h.length) return;
+    var last=h[h.length-1];
+    if(last.end===newStart && !last.result && Number.isFinite(newStartPrice)){
+      last.closePrice=newStartPrice;
+      var actual=newStartPrice>last.lockedPrice ? "Higher" : newStartPrice<last.lockedPrice ? "Lower" : "Flat";
+      last.actual=actual;
+      last.result=actual==="Flat" ? "PUSH" : actual===last.direction ? "WIN" : "LOSS";
+      savePredictionHistory(h);
+    }
+  }
+
+  function renderHistory(){
+    var h=loadPredictionHistory().slice(-8).reverse();
+    if(!h.length){
+      el("history").textContent="No completed local predictions yet.";
+      return;
+    }
+    el("history").innerHTML=h.map(function(x){
+      var result=x.result||"OPEN";
+      var cls=result==="WIN"?"ok":result==="LOSS"?"":"warn";
+      return '<div class="history-item">'+
+        '<span>'+dateShort(x.start)+' '+timeOnly(x.start)+'–'+timeOnly(x.end)+'</span>'+
+        '<span>'+x.direction+' '+(x.confidence*100).toFixed(1)+'%</span>'+
+        '<span class="'+cls+'">'+result+'</span>'+
+      '</div>';
+    }).join("");
+  }
+
+  function renderModel(){
+    el("totalWindows").textContent=model.samples.toLocaleString();
+    el("trainWindows").textContent=model.train.toLocaleString();
+    el("testWindows").textContent=model.test.toLocaleString();
+    el("oosAccuracy").textContent=fmtPct(model.accuracy,1);
+    el("brier").textContent=model.brier.toFixed(3);
+    el("rangeText").textContent=
+      "Calibration: "+dateShort(model.trainStart)+" → "+dateShort(model.trainEnd)+
+      ". Out-of-sample verification: "+dateShort(model.testStart)+" → "+dateShort(model.testEnd)+
+      ". The split is chronological and the verification segment is never used to fit the probability curve.";
+    setProgress(100,"Calibration complete. Probability model is frozen from the 70% in-sample segment.");
+  }
+
+  async function makeLockedPrediction(){
+    if(!model) return;
+    var live=await fetchCurrentAndRecent();
+    var start=live.start;
+    var currentCandle=live.candles.find(function(c){return c.time===start;});
+
+    if(!currentCandle){
+      await sleep(1500);
+      live=await fetchCurrentAndRecent();
+      currentCandle=live.candles.find(function(c){return c.time===start;});
+    }
+    if(!currentCandle) throw new Error("The current quarter-hour candle is not available yet. Try again in a few seconds.");
+
+    var prior=completedCandles.filter(function(c){return c.time<start;});
+    var recentPrior=live.candles.filter(function(c){return c.time<start;});
+    var merged=new Map();
+    prior.slice(-100).forEach(function(c){merged.set(c.time,c);});
+    recentPrior.forEach(function(c){merged.set(c.time,c);});
+    var history=Array.from(merged.values()).sort(function(a,b){return a.time-b.time;});
+
+    var s=computeSignal(history);
+    if(!s) throw new Error("Not enough completed candles for the live signal.");
+
+    var pHigher=probabilityHigher(s.score,model);
+    var direction=pHigher>=0.5 ? "Higher" : "Lower";
+    var confidence=direction==="Higher" ? pHigher : 1-pHigher;
+    var predictedMove=moveMagnitude(s.score,model);
+    var signedMove=direction==="Higher" ? predictedMove : -predictedMove;
+    var predictedPrice=currentCandle.open*Math.exp(signedMove);
+
+    settlePreviousIfPossible(null,currentCandle.open,start);
+
+    var stored=loadPredictionHistory();
+    var existing=stored.find(function(x){return x.start===start;});
+    if(existing){
+      currentPrediction=existing;
+      if(!Number.isFinite(currentPrediction.predictedPrice)){
+        currentPrediction.predictedPrice=predictedPrice;
+        currentPrediction.predictedMove=predictedMove;
+        var existingIndex=stored.findIndex(function(x){return x.start===start;});
+        if(existingIndex>=0) stored[existingIndex]=currentPrediction;
+        savePredictionHistory(stored);
+      }
+    }else{
+      currentPrediction={
+        start:start,
+        end:start+BAR_MS,
+        lockedPrice:currentCandle.open,
+        direction:direction,
+        confidence:confidence,
+        pHigher:pHigher,
+        score:s.score,
+        predictedPrice:predictedPrice,
+        predictedMove:predictedMove,
+        createdAt:Date.now()
+      };
+      stored.push(currentPrediction);
+      savePredictionHistory(stored);
+    }
+
+    renderPrediction();
+    renderHistory();
+  }
+
+  function renderPrediction(){
+    if(!currentPrediction) return;
+    var p=el("prediction");
+    p.textContent=currentPrediction.direction+" "+(currentPrediction.confidence*100).toFixed(1)+"%";
+    p.className="prediction "+(currentPrediction.direction==="Higher"?"higher":"lower");
+    el("predictedPrice").textContent=fmtMoney(currentPrediction.predictedPrice);
+    el("lockedPrice").textContent=fmtMoney(currentPrediction.lockedPrice);
+    el("windowTime").textContent=timeOnly(currentPrediction.start)+" → "+timeOnly(currentPrediction.end);
+    el("signalScore").textContent=(currentPrediction.score>0?"+":"")+currentPrediction.score.toFixed(1);
+    el("heroStatus").textContent=
+      "Locked at "+timeOnly(currentPrediction.start)+
+      ". The price estimate uses the median 15-minute move from similar-score windows in the 70% calibration set; the confidence and price remain locked for this window.";
+  }
+
+  function updateCountdown(){
+    var now=Date.now();
+    var start=intervalStartMs(now);
+    var end=start+BAR_MS;
+    if(currentPrediction) end=currentPrediction.end;
+    var ms=Math.max(0,end-now);
+    var m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000);
+    el("countdown").textContent=m+":"+String(s).padStart(2,"0");
+  }
+
+  async function updateTicker(){
+    try{
+      var p=await fetchTicker();
+      el("livePrice").textContent=fmtMoney(p);
+    }catch(e){}
+  }
+
+  async function boundaryCheck(){
+    if(!model || busy) return;
+    var start=intervalStartMs(Date.now());
+    if(!currentPrediction || currentPrediction.start!==start){
+      try{
+        busy=true;
+        await makeLockedPrediction();
+      }catch(e){
+        setError(e.message);
+      }finally{
+        busy=false;
+      }
+    }
+  }
+
+  async function runAll(force){
+    if(busy) return;
+    busy=true;
+    el("rerunBtn").disabled=true;
+    setError("");
+    model=null;
+    currentPrediction=null;
+    el("predictedPrice").textContent="—";
+    el("prediction").textContent="CALIBRATING…";
+    el("prediction").className="prediction loading";
+    el("heroStatus").textContent="Loading historical data and fitting the probability model.";
+    setProgress(1,"Preparing historical data…");
+
+    try{
+      var candles=await fetchHistorical90d(!!force);
+      setProgress(52,"Building strictly past-only features for each 15-minute window…");
+      await sleep(30);
+      calibrate(candles);
+      setProgress(88,"Running the frozen model over the 30% out-of-sample segment…");
+      await sleep(30);
+      renderModel();
+      busy=false;
+      await makeLockedPrediction();
+      await updateTicker();
+    }catch(e){
+      setError(e.message);
+      el("prediction").textContent="DATA ERROR";
+      el("prediction").className="prediction loading";
+      el("heroStatus").textContent="The model could not finish calibration.";
+    }finally{
+      busy=false;
+      el("rerunBtn").disabled=false;
+    }
+  }
+
+  el("rerunBtn").addEventListener("click",function(){ runAll(true); });
+  document.addEventListener("visibilitychange",function(){
+    if(document.visibilityState==="visible"){
+      boundaryCheck();
+      updateTicker();
+    }
+  });
+
+  setInterval(updateCountdown,1000);
+  setInterval(boundaryCheck,5000);
+  setInterval(updateTicker,15000);
+
+  updateCountdown();
+  renderHistory();
+  runAll(false);
+})();
+</script>
+</body>
+</html>
