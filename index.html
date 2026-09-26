@@ -119,6 +119,48 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 }
 .recalibrate:active{transform:translateY(1px)}
 .note{text-align:center;color:var(--muted);font-size:10px;line-height:1.5;padding:15px 8px 0}
+.records-section{
+  margin-top:18px;border:1px solid var(--line);border-radius:24px;
+  background:linear-gradient(180deg,rgba(15,22,33,.98),rgba(8,12,19,.98));
+  box-shadow:var(--shadow);overflow:hidden
+}
+.records-head{
+  display:flex;align-items:end;justify-content:space-between;gap:12px;
+  padding:15px 16px 13px;border-bottom:1px solid rgba(255,255,255,.055)
+}
+.records-title{font-size:16px;font-weight:850;letter-spacing:-.02em}
+.records-sub{font-size:10px;color:var(--muted);margin-top:3px}
+.records-summary{font-size:10px;color:var(--muted);white-space:nowrap}
+.records-wrap{padding:12px}
+.records-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px
+}
+.record-header{
+  padding:10px 7px;border:1px solid #273243;border-radius:13px;
+  text-align:center;background:rgba(255,255,255,.025)
+}
+.record-header strong{display:block;font-size:12px;letter-spacing:.02em}
+.record-header span{display:block;font-size:9px;color:var(--muted);margin-top:2px}
+.record-header.btc strong{color:var(--btc)}
+.record-header.eth strong{color:var(--eth)}
+.record-header.doge strong{color:var(--doge)}
+.record-time{
+  grid-column:1/-1;text-align:center;color:var(--muted);
+  font-size:9px;padding:7px 0 0;font-variant-numeric:tabular-nums
+}
+.record-cell{
+  display:flex;align-items:center;justify-content:center;min-height:43px;
+  border-radius:13px;border:1px solid #232d3c;background:#0a1018;
+  font-size:11px;font-weight:900;letter-spacing:.055em
+}
+.record-cell.WIN{color:var(--up);background:rgba(53,214,148,.075);border-color:rgba(53,214,148,.22)}
+.record-cell.LOSS{color:var(--down);background:rgba(255,102,133,.075);border-color:rgba(255,102,133,.22)}
+.record-cell.PUSH{color:#f4c35d;background:rgba(244,195,93,.07);border-color:rgba(244,195,93,.22)}
+.record-cell.EMPTY{color:#556173}
+.empty-records{
+  grid-column:1/-1;text-align:center;padding:18px 8px;color:var(--muted);font-size:11px
+}
+
 .engine-frame{
   position:absolute!important;left:-10000px!important;top:0!important;
   width:2px!important;height:2px!important;opacity:.001!important;
@@ -232,6 +274,24 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     </article>
   </section>
 
+  <section class="records-section" aria-labelledby="recordsTitle">
+    <div class="records-head">
+      <div>
+        <div class="records-title" id="recordsTitle">Results Ledger</div>
+        <div class="records-sub">Settled quarter-hour forecasts · newest first</div>
+      </div>
+      <div class="records-summary" id="recordsSummary">No settled results yet</div>
+    </div>
+    <div class="records-wrap">
+      <div class="records-grid" id="recordsGrid">
+        <div class="record-header btc"><strong>BTC</strong><span>Sixcents</span></div>
+        <div class="record-header eth"><strong>ETH</strong><span>Bandjovi</span></div>
+        <div class="record-header doge"><strong>DOGE</strong><span>Solsister</span></div>
+        <div class="empty-records">Waiting for settled predictions…</div>
+      </div>
+    </div>
+  </section>
+
   <div class="note">Each asset keeps its own calibration, model state, local prediction history and Coinbase market-data logic. The unified dashboard only mirrors the engines' live output.</div>
 </main>
 
@@ -296,6 +356,76 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     }
   }
 
+  function ledgerRows(key){
+    try{
+      var rows=JSON.parse(localStorage.getItem(key)||"[]");
+      if(!Array.isArray(rows)) return [];
+      return rows.filter(function(r){
+        return r && Number.isFinite(Number(r.start)) &&
+          (r.result==="WIN" || r.result==="LOSS" || r.result==="PUSH");
+      });
+    }catch(e){ return []; }
+  }
+
+  function formatRecordTime(ms){
+    var d=new Date(Number(ms));
+    if(!Number.isFinite(d.getTime())) return "";
+    return d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+  }
+
+  function renderRecords(){
+    var sources={
+      btc:ledgerRows("sixcents_predictions_v3"),
+      eth:ledgerRows("sixcents_eth_predictions_v1"),
+      doge:ledgerRows("doge_predictions_v2")
+    };
+    var byCoin={btc:{},eth:{},doge:{}};
+    var times={};
+    ["btc","eth","doge"].forEach(function(coin){
+      sources[coin].forEach(function(row){
+        var t=String(Number(row.start));
+        byCoin[coin][t]=row.result;
+        times[t]=true;
+      });
+    });
+
+    var starts=Object.keys(times).map(Number).filter(Number.isFinite).sort(function(a,b){return b-a;}).slice(0,10);
+    var grid=document.getElementById("recordsGrid");
+    var summary=document.getElementById("recordsSummary");
+    if(!grid) return;
+
+    var out=
+      '<div class="record-header btc"><strong>BTC</strong><span>Sixcents</span></div>'+
+      '<div class="record-header eth"><strong>ETH</strong><span>Bandjovi</span></div>'+
+      '<div class="record-header doge"><strong>DOGE</strong><span>Solsister</span></div>';
+
+    if(!starts.length){
+      out+='<div class="empty-records">Waiting for settled predictions…</div>';
+      if(summary) summary.textContent="No settled results yet";
+      grid.innerHTML=out;
+      return;
+    }
+
+    starts.forEach(function(start){
+      var end=start+(15*60*1000);
+      out+='<div class="record-time">'+formatRecordTime(start)+'–'+formatRecordTime(end)+'</div>';
+      ["btc","eth","doge"].forEach(function(coin){
+        var result=byCoin[coin][String(start)] || "—";
+        var cls=result==="WIN"?"WIN":result==="LOSS"?"LOSS":result==="PUSH"?"PUSH":"EMPTY";
+        out+='<div class="record-cell '+cls+'">'+result+'</div>';
+      });
+    });
+    grid.innerHTML=out;
+
+    var all=sources.btc.concat(sources.eth,sources.doge);
+    var wins=all.filter(function(r){return r.result==="WIN";}).length;
+    var losses=all.filter(function(r){return r.result==="LOSS";}).length;
+    var pushes=all.filter(function(r){return r.result==="PUSH";}).length;
+    if(summary){
+      summary.textContent=wins+"W · "+losses+"L"+(pushes?" · "+pushes+"P":"");
+    }
+  }
+
   function syncAll(){
     var ready=0;
     if(syncEngine("btc")) ready++;
@@ -303,6 +433,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     if(syncEngine("doge")) ready++;
     var label=document.getElementById("syncLabel");
     if(label) label.textContent=ready===3?"3 engines live":ready+" of 3 engines live";
+    renderRecords();
   }
 
   document.addEventListener("click",function(e){
