@@ -1,0 +1,1135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080b12">
+<title>Dogecoin 15-Minute Model</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#070a10;
+  --panel:#0d121c;
+  --panel2:#111827;
+  --line:#202a3a;
+  --text:#f4f7fb;
+  --muted:#8d9aab;
+  --accent:#d8ad36;
+  --accent2:#f0d36e;
+  --up:#38d996;
+  --down:#ff6685;
+  --warn:#f4c35d;
+  --shadow:0 18px 50px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:
+  radial-gradient(circle at 88% -5%,rgba(216,173,54,.18),transparent 34%),
+  radial-gradient(circle at -10% 20%,rgba(240,211,110,.10),transparent 32%),
+  var(--bg);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",Inter,Segoe UI,sans-serif;color:var(--text)}
+body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button{font:inherit}
+.app{width:min(100%,720px);margin:0 auto;padding:18px 14px 40px}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 2px 16px}
+.brand-left{display:flex;align-items:center;gap:11px}
+.logo{width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#d8ad36,#f0d36e);display:grid;place-items:center;box-shadow:0 10px 28px rgba(216,173,54,.25);font-weight:900;color:#071019}
+.eyebrow{color:var(--muted);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700}
+h1{font-size:20px;line-height:1.15;margin:3px 0 0;letter-spacing:-.02em}
+.live-dot{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:12px;white-space:nowrap}
+.live-dot:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--up);box-shadow:0 0 0 4px rgba(56,217,150,.10)}
+.card{background:linear-gradient(180deg,rgba(17,24,39,.96),rgba(12,17,26,.96));border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}
+.hero{padding:22px 18px 18px;overflow:hidden;position:relative}
+.hero:after{content:"";position:absolute;width:210px;height:210px;right:-85px;top:-95px;border-radius:50%;background:radial-gradient(circle,rgba(216,173,54,.19),transparent 68%);pointer-events:none}
+.label{font-size:12px;color:var(--muted);font-weight:650;letter-spacing:.01em}
+.predicted-price{font-size:48px;line-height:1.02;letter-spacing:-.055em;font-weight:800;margin:7px 0 9px;font-variant-numeric:tabular-nums}
+.direction-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.direction{font-size:23px;font-weight:800;letter-spacing:-.02em}
+.direction.up{color:var(--up)} .direction.down{color:var(--down)}
+.pill{border:1px solid var(--line);border-radius:999px;padding:6px 9px;font-size:11px;color:var(--muted);background:rgba(255,255,255,.025)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.stat{padding:12px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.018);min-width:0}
+.stat-value{font-size:16px;font-weight:750;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.stat-value.score-pos{color:var(--up)} .stat-value.score-neg{color:var(--down)}
+.status{margin:12px 0 0;padding:11px 12px;border-radius:14px;background:#0b111b;border:1px solid var(--line);font-size:12px;line-height:1.45;color:var(--muted)}
+.status strong{color:var(--text)}
+.status.error{border-color:rgba(255,102,133,.35);color:#ffb2c1}
+.status.ok{border-color:rgba(56,217,150,.25)}
+.progress{height:5px;background:#171f2d;border-radius:999px;overflow:hidden;margin-top:9px;display:none}
+.progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .25s ease}
+.section{margin-top:14px;padding:17px 15px}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.section-title{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.btn{appearance:none;border:1px solid #2c3850;color:var(--text);background:#141c29;border-radius:12px;padding:9px 11px;font-size:12px;font-weight:750;cursor:pointer}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.5;cursor:default}
+.dashboard{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.metric{padding:11px 10px;border-radius:13px;background:#0a1019;border:1px solid #1c2635}
+.metric .v{font-size:17px;font-weight:800;margin-top:4px;font-variant-numeric:tabular-nums}
+.metric.wide{grid-column:1/-1}
+.explain{font-size:12px;line-height:1.55;color:var(--muted);margin:12px 1px 0}
+.history{display:flex;flex-direction:column;gap:8px}
+.history-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;padding:11px 10px;border-radius:13px;border:1px solid #1d2735;background:#0a1019}
+.history-main{min-width:0}
+.history-window{font-size:13px;font-weight:750;white-space:nowrap}
+.history-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.history-dir{font-size:12px;font-weight:800}
+.history-dir.up{color:var(--up)} .history-dir.down{color:var(--down)}
+.result{font-size:11px;font-weight:900;padding:5px 7px;border-radius:8px;min-width:43px;text-align:center}
+.result.WIN{background:rgba(56,217,150,.12);color:var(--up)}
+.result.LOSS{background:rgba(255,102,133,.12);color:var(--down)}
+.result.PUSH{background:rgba(244,195,93,.12);color:var(--warn)}
+.result.PENDING{background:rgba(141,154,171,.10);color:var(--muted)}
+.empty{padding:15px 2px;color:var(--muted);font-size:12px}
+.footer{font-size:11px;line-height:1.55;color:#6f7c8d;margin:15px 4px 0;text-align:center}
+@media(max-width:380px){
+  .predicted-price{font-size:43px}
+  .stat-value{font-size:14px}
+  .app{padding-left:10px;padding-right:10px}
+}
+</style>
+</head>
+<body>
+<main class="app">
+  <div class="brand">
+    <div class="brand-left">
+      <div class="logo">Ð</div>
+      <div>
+        <div class="eyebrow">DOGE · Coinbase Exchange</div>
+        <h1>Dogecoin 15-Minute Model</h1>
+      </div>
+    </div>
+    <div class="live-dot">Live</div>
+  </div>
+
+  <section class="card hero">
+    <div class="label">Predicted 15-minute close</div>
+    <div class="predicted-price" id="predictedPrice">—</div>
+    <div class="direction-row">
+      <div class="direction" id="direction">Calibrating…</div>
+      <div class="pill" id="confidenceLabel">Historical-model probability</div>
+    </div>
+
+    <div class="grid">
+      <div class="stat">
+        <div class="label">Locked start price</div>
+        <div class="stat-value" id="lockedPrice">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Live DOGE/USD</div>
+        <div class="stat-value" id="livePrice">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Window</div>
+        <div class="stat-value" id="windowLabel">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Time remaining</div>
+        <div class="stat-value" id="countdown">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Signal score</div>
+        <div class="stat-value" id="signalScore">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Expected historical move</div>
+        <div class="stat-value" id="expectedMove">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">UTC time bucket</div>
+        <div class="stat-value" id="timeBucket">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">OOS accuracy this hour</div>
+        <div class="stat-value" id="hourAccuracy">—</div>
+      </div>
+    </div>
+
+    <div class="status" id="statusBox">
+      <strong id="statusTitle">Starting DOGE model…</strong>
+      <div id="statusText">Checking local calibration and Coinbase market data.</div>
+      <div class="progress" id="progress"><i id="progressBar"></i></div>
+    </div>
+  </section>
+
+  <section class="card section">
+    <div class="section-head">
+      <div class="section-title">Calibration dashboard</div>
+      <button class="btn" id="recalibrateBtn">Re-run calibration</button>
+    </div>
+    <div class="dashboard">
+      <div class="metric"><div class="label">Historical windows</div><div class="v" id="mTotal">—</div></div>
+      <div class="metric"><div class="label">70% calibration</div><div class="v" id="mTrain">—</div></div>
+      <div class="metric"><div class="label">30% verification</div><div class="v" id="mVerify">—</div></div>
+      <div class="metric"><div class="label">OOS directional accuracy</div><div class="v" id="mAccuracy">—</div></div>
+      <div class="metric"><div class="label">OOS Brier score</div><div class="v" id="mBrier">—</div></div>
+      <div class="metric"><div class="label">Probability model</div><div class="v" id="mCoeffs">—</div></div>
+      <div class="metric"><div class="label">Score-only OOS accuracy</div><div class="v" id="mBaseAccuracy">—</div></div>
+      <div class="metric"><div class="label">Time-aware accuracy lift</div><div class="v" id="mAccuracyLift">—</div></div>
+      <div class="metric"><div class="label">Score-only Brier</div><div class="v" id="mBaseBrier">—</div></div>
+      <div class="metric wide"><div class="label">Calibration date range</div><div class="v" id="mTrainRange">—</div></div>
+      <div class="metric wide"><div class="label">Verification date range</div><div class="v" id="mVerifyRange">—</div></div>
+    </div>
+    <p class="explain">The model is calibrated on older DOGE/USD history and verified on the most recent 30% of the historical sample. Probability now uses the technical score plus cyclical UTC time-of-day and day-of-week features. Expected movement is also conditioned on score and UTC hour when enough training observations exist. The score-only OOS benchmark remains visible so you can see whether the added clock features actually helped. Forecasts are statistical estimates, not guarantees.</p>
+  </section>
+
+  <section class="card section">
+    <div class="section-head"><div class="section-title">Recent predictions</div><div class="label">Stored locally</div></div>
+    <div class="history" id="historyList"><div class="empty">No settled predictions yet.</div></div>
+  </section>
+
+  <div class="footer">Quarter-hour boundaries: :00 · :15 · :30 · :45. Locked forecasts do not change during an active window.</div>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  const API = "https://api.exchange.coinbase.com";
+  const PRODUCT = "DOGE-USD";
+  const GRANULARITY = 900;
+  const INTERVAL_MS = GRANULARITY * 1000;
+  const HISTORY_DAYS = 90;
+  const CACHE_MS = 6 * 60 * 60 * 1000;
+  const CHUNK_CANDLES = 299;
+  const MIN_NEARBY = 30;
+  const HISTORY_KEY = "doge_history_v1";
+  const PREDICTIONS_KEY = "doge_predictions_v2";
+  const MODEL_KEY = "doge_model_v2";
+  const CALIBRATION_KEY = "doge_calibration_v2";
+
+  const SETTINGS = Object.freeze({
+    rsiPeriod: 14,
+    rsiBull: 55,
+    rsiBear: 45,
+    momentumPct: 0.05,
+    volumeRatio: 1.20,
+    bollPeriod: 20,
+    bollStd: 2,
+    bollBull: 0.55,
+    bollBear: 0.45,
+    emaFast: 9,
+    emaSlow: 21,
+    macdFast: 12,
+    macdSlow: 26,
+    macdSignal: 9,
+    warmup: 40
+  });
+
+  const $ = id => document.getElementById(id);
+  const ui = {
+    predictedPrice: $("predictedPrice"),
+    direction: $("direction"),
+    confidenceLabel: $("confidenceLabel"),
+    lockedPrice: $("lockedPrice"),
+    livePrice: $("livePrice"),
+    windowLabel: $("windowLabel"),
+    countdown: $("countdown"),
+    signalScore: $("signalScore"),
+    expectedMove: $("expectedMove"),
+    timeBucket: $("timeBucket"),
+    hourAccuracy: $("hourAccuracy"),
+    statusBox: $("statusBox"),
+    statusTitle: $("statusTitle"),
+    statusText: $("statusText"),
+    progress: $("progress"),
+    progressBar: $("progressBar"),
+    recalibrateBtn: $("recalibrateBtn"),
+    mTotal: $("mTotal"),
+    mTrain: $("mTrain"),
+    mVerify: $("mVerify"),
+    mAccuracy: $("mAccuracy"),
+    mBrier: $("mBrier"),
+    mCoeffs: $("mCoeffs"),
+    mBaseAccuracy: $("mBaseAccuracy"),
+    mAccuracyLift: $("mAccuracyLift"),
+    mBaseBrier: $("mBaseBrier"),
+    mTrainRange: $("mTrainRange"),
+    mVerifyRange: $("mVerifyRange"),
+    historyList: $("historyList")
+  };
+
+  let state = {
+    candles: [],
+    samples: [],
+    model: null,
+    activePrediction: null,
+    isCalibrating: false,
+    lastTicker: null,
+    currentBoundary: null
+  };
+
+  function safeParse(raw, fallback = null) {
+    try { return raw ? JSON.parse(raw) : fallback; } catch { return fallback; }
+  }
+
+  function loadLocal(key, fallback = null) {
+    try { return safeParse(localStorage.getItem(key), fallback); } catch { return fallback; }
+  }
+
+  function saveLocal(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    catch (err) {
+      console.warn("localStorage write failed", key, err);
+      return false;
+    }
+  }
+
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  function finiteNumber(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+  function sigmoid(z) {
+    if (z >= 0) {
+      const e = Math.exp(-z);
+      return 1 / (1 + e);
+    }
+    const e = Math.exp(z);
+    return e / (1 + e);
+  }
+
+  function timeFeatures(timestampMs) {
+    const d = new Date(timestampMs);
+    const minuteOfDay = d.getUTCHours() * 60 + d.getUTCMinutes();
+    const timeAngle = 2 * Math.PI * minuteOfDay / 1440;
+    const day = d.getUTCDay();
+    const dayAngle = 2 * Math.PI * day / 7;
+    return {
+      utcHour:d.getUTCHours(),
+      utcMinute:d.getUTCMinutes(),
+      timeSin:Math.sin(timeAngle),
+      timeCos:Math.cos(timeAngle),
+      daySin:Math.sin(dayAngle),
+      dayCos:Math.cos(dayAngle)
+    };
+  }
+
+  function circularHourDistance(a, b) {
+    const d = Math.abs(a - b);
+    return Math.min(d, 24 - d);
+  }
+
+  function fmtUtcHour(hour) {
+    const h = String(hour).padStart(2, "0");
+    return h + ":00–" + h + ":59 UTC";
+  }
+
+  function fmtPrice(v) {
+    return Number.isFinite(v) ? "$" + v.toLocaleString(undefined, {minimumFractionDigits:5, maximumFractionDigits:5}) : "—";
+  }
+
+  function fmtPct(v, digits = 1) {
+    return Number.isFinite(v) ? (v * 100).toFixed(digits) + "%" : "—";
+  }
+
+  function fmtTime(ms) {
+    return new Intl.DateTimeFormat([], {hour:"numeric", minute:"2-digit"}).format(new Date(ms));
+  }
+
+  function fmtDate(ms) {
+    return new Intl.DateTimeFormat([], {month:"short", day:"numeric", year:"numeric"}).format(new Date(ms));
+  }
+
+  function fmtRange(a, b) {
+    return Number.isFinite(a) && Number.isFinite(b) ? fmtDate(a) + " → " + fmtDate(b) : "—";
+  }
+
+  function setStatus(title, text, kind = "", progress = null) {
+    ui.statusTitle.textContent = title;
+    ui.statusText.textContent = text || "";
+    ui.statusBox.className = "status" + (kind ? " " + kind : "");
+    if (Number.isFinite(progress)) {
+      ui.progress.style.display = "block";
+      ui.progressBar.style.width = clamp(progress, 0, 1) * 100 + "%";
+    } else {
+      ui.progress.style.display = "none";
+    }
+  }
+
+  async function fetchJSON(url, retries = 3) {
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: {"Accept":"application/json"},
+          cache: "no-store"
+        });
+        clearTimeout(timer);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.json();
+      } catch (err) {
+        clearTimeout(timer);
+        lastErr = err;
+        if (attempt < retries) await sleep(600 * (attempt + 1));
+      }
+    }
+    throw lastErr || new Error("Market data request failed");
+  }
+
+  function normalizeCandle(row) {
+    if (!Array.isArray(row) || row.length < 6) return null;
+    const time = finiteNumber(row[0]);
+    const low = finiteNumber(row[1]);
+    const high = finiteNumber(row[2]);
+    const open = finiteNumber(row[3]);
+    const close = finiteNumber(row[4]);
+    const volume = finiteNumber(row[5]);
+    if ([time, low, high, open, close, volume].some(v => v === null)) return null;
+    if (time <= 0 || low <= 0 || high <= 0 || open <= 0 || close <= 0 || volume < 0) return null;
+    if (high < low) return null;
+    return {time:Math.trunc(time), low, high, open, close, volume};
+  }
+
+  function validateAndSort(rows) {
+    const map = new Map();
+    for (const row of rows || []) {
+      const c = Array.isArray(row) ? normalizeCandle(row) : normalizeCandle([row.time,row.low,row.high,row.open,row.close,row.volume]);
+      if (c) map.set(c.time, c);
+    }
+    return [...map.values()].sort((a,b) => a.time - b.time);
+  }
+
+  function compactCandles(candles) {
+    return candles.map(c => [c.time,c.low,c.high,c.open,c.close,c.volume]);
+  }
+
+  async function downloadHistory(force = false) {
+    if (!force) {
+      const cached = loadLocal(HISTORY_KEY);
+      if (cached && Number.isFinite(cached.fetchedAt) && Date.now() - cached.fetchedAt < CACHE_MS && Array.isArray(cached.data)) {
+        const candles = validateAndSort(cached.data);
+        if (candles.length > 3000) {
+          setStatus("Loaded cached DOGE history", candles.length.toLocaleString() + " validated 15-minute candles.", "ok");
+          return {candles, fetchedAt:cached.fetchedAt};
+        }
+      }
+    }
+
+    const boundarySec = Math.floor(Date.now() / INTERVAL_MS) * GRANULARITY;
+    const finalCompletedSec = boundarySec - GRANULARITY;
+    const firstSec = finalCompletedSec - HISTORY_DAYS * 86400;
+    const chunkSpan = (CHUNK_CANDLES - 1) * GRANULARITY;
+    const ranges = [];
+    for (let start = firstSec; start <= finalCompletedSec; start += CHUNK_CANDLES * GRANULARITY) {
+      ranges.push([start, Math.min(start + chunkSpan, finalCompletedSec)]);
+    }
+
+    const rows = [];
+    for (let i = 0; i < ranges.length; i++) {
+      const [startSec, endSec] = ranges[i];
+      setStatus(
+        "Downloading DOGE history…",
+        (i + 1) + " / " + ranges.length + " chunks",
+        "",
+        i / ranges.length * 0.58
+      );
+      const url = API + "/products/" + PRODUCT + "/candles?granularity=" + GRANULARITY +
+        "&start=" + encodeURIComponent(new Date(startSec * 1000).toISOString()) +
+        "&end=" + encodeURIComponent(new Date(endSec * 1000).toISOString());
+      const data = await fetchJSON(url, 3);
+      if (Array.isArray(data)) rows.push(...data);
+      if (i < ranges.length - 1) await sleep(220);
+    }
+
+    const candles = validateAndSort(rows);
+    if (candles.length < 3000) throw new Error("Only " + candles.length + " valid candles were returned; expected thousands.");
+
+    const payload = {fetchedAt:Date.now(), data:compactCandles(candles)};
+    saveLocal(HISTORY_KEY, payload);
+    return {candles, fetchedAt:payload.fetchedAt};
+  }
+
+  function emaSeries(values, period) {
+    const out = new Array(values.length);
+    const alpha = 2 / (period + 1);
+    let e = values[0];
+    out[0] = e;
+    for (let i = 1; i < values.length; i++) {
+      e = alpha * values[i] + (1 - alpha) * e;
+      out[i] = e;
+    }
+    return out;
+  }
+
+  function rsiSeries(closes, period) {
+    const out = new Array(closes.length).fill(null);
+    if (closes.length <= period) return out;
+    let gain = 0, loss = 0;
+    for (let i = 1; i <= period; i++) {
+      const d = closes[i] - closes[i-1];
+      if (d >= 0) gain += d; else loss -= d;
+    }
+    let avgGain = gain / period;
+    let avgLoss = loss / period;
+    out[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    for (let i = period + 1; i < closes.length; i++) {
+      const d = closes[i] - closes[i-1];
+      const g = d > 0 ? d : 0;
+      const l = d < 0 ? -d : 0;
+      avgGain = (avgGain * (period - 1) + g) / period;
+      avgLoss = (avgLoss * (period - 1) + l) / period;
+      out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    }
+    return out;
+  }
+
+  function rollingMeanStd(values, endIndex, period) {
+    if (endIndex - period + 1 < 0) return null;
+    let sum = 0;
+    for (let i = endIndex - period + 1; i <= endIndex; i++) sum += values[i];
+    const mean = sum / period;
+    let variance = 0;
+    for (let i = endIndex - period + 1; i <= endIndex; i++) {
+      const d = values[i] - mean;
+      variance += d * d;
+    }
+    return {mean, std:Math.sqrt(variance / period)};
+  }
+
+  function buildIndicatorContext(candles) {
+    const closes = candles.map(c => c.close);
+    const ema9 = emaSeries(closes, SETTINGS.emaFast);
+    const ema21 = emaSeries(closes, SETTINGS.emaSlow);
+    const ema12 = emaSeries(closes, SETTINGS.macdFast);
+    const ema26 = emaSeries(closes, SETTINGS.macdSlow);
+    const macd = closes.map((_,i) => ema12[i] - ema26[i]);
+    const macdSignal = emaSeries(macd, SETTINGS.macdSignal);
+    const rsi = rsiSeries(closes, SETTINGS.rsiPeriod);
+    const runLen = new Array(candles.length).fill(1);
+    for (let i = 1; i < candles.length; i++) {
+      runLen[i] = candles[i].time - candles[i-1].time === GRANULARITY ? runLen[i-1] + 1 : 1;
+    }
+    return {closes,ema9,ema21,macd,macdSignal,rsi,runLen};
+  }
+
+  function scoreAtCompletedIndex(candles, ctx, p) {
+    if (p < SETTINGS.warmup || ctx.runLen[p] < SETTINGS.warmup) return null;
+    let score = 0;
+
+    if (ctx.ema9[p] > ctx.ema21[p]) score += 2;
+    else if (ctx.ema9[p] < ctx.ema21[p]) score -= 2;
+
+    const hist = ctx.macd[p] - ctx.macdSignal[p];
+    if (hist > 0) score += 2;
+    else if (hist < 0) score -= 2;
+
+    const rsi = ctx.rsi[p];
+    if (!Number.isFinite(rsi)) return null;
+    if (rsi >= SETTINGS.rsiBull) score += 1;
+    else if (rsi <= SETTINGS.rsiBear) score -= 1;
+
+    let tpv = 0, vol = 0;
+    for (let i = p - 3; i <= p; i++) {
+      const c = candles[i];
+      const typical = (c.high + c.low + c.close) / 3;
+      tpv += typical * c.volume;
+      vol += c.volume;
+    }
+    if (vol > 0) {
+      const vwap = tpv / vol;
+      if (candles[p].close > vwap) score += 1;
+      else if (candles[p].close < vwap) score -= 1;
+    }
+
+    const bb = rollingMeanStd(ctx.closes, p, SETTINGS.bollPeriod);
+    if (bb && bb.std > 0) {
+      const lower = bb.mean - SETTINGS.bollStd * bb.std;
+      const upper = bb.mean + SETTINGS.bollStd * bb.std;
+      const pctB = (candles[p].close - lower) / (upper - lower);
+      if (pctB > SETTINGS.bollBull) score += 1;
+      else if (pctB < SETTINGS.bollBear) score -= 1;
+    }
+
+    const momentum = (candles[p].close / candles[p-1].close - 1) * 100;
+    if (momentum > SETTINGS.momentumPct) score += 1;
+    else if (momentum < -SETTINGS.momentumPct) score -= 1;
+
+    let prevVol = 0;
+    for (let i = p - 4; i <= p - 1; i++) prevVol += candles[i].volume;
+    const avgPrevVol = prevVol / 4;
+    const ratio = avgPrevVol > 0 ? candles[p].volume / avgPrevVol : 0;
+    if (ratio >= SETTINGS.volumeRatio && momentum > 0) score += 1;
+    else if (ratio >= SETTINGS.volumeRatio && momentum < 0) score -= 1;
+
+    return {score, momentum, volumeRatio:ratio};
+  }
+
+  function buildSamples(candles) {
+    const ctx = buildIndicatorContext(candles);
+    const samples = [];
+    for (let i = SETTINGS.warmup + 1; i < candles.length; i++) {
+      if (candles[i].time - candles[i-1].time !== GRANULARITY) continue;
+      const signal = scoreAtCompletedIndex(candles, ctx, i - 1);
+      if (!signal) continue;
+      const open = candles[i].open;
+      const close = candles[i].close;
+      if (!(open > 0 && close > 0) || close === open) continue;
+      const timestamp = candles[i].time * 1000;
+      const tf = timeFeatures(timestamp);
+      const logReturn = Math.log(close / open);
+      samples.push({
+        timestamp,
+        score:signal.score,
+        utcHour:tf.utcHour,
+        utcMinute:tf.utcMinute,
+        timeSin:tf.timeSin,
+        timeCos:tf.timeCos,
+        daySin:tf.daySin,
+        dayCos:tf.dayCos,
+        open,
+        close,
+        y:close > open ? 1 : 0,
+        logReturn,
+        absReturn:Math.abs(logReturn)
+      });
+    }
+    return samples;
+  }
+
+  function modelVector(sample, useTime = true) {
+    const base = [1, sample.score / 9];
+    if (!useTime) return base;
+    return base.concat([sample.timeSin, sample.timeCos, sample.daySin, sample.dayCos]);
+  }
+
+  function dot(a, b) {
+    let s = 0;
+    for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+    return s;
+  }
+
+  function fitLogistic(samples, useTime = true, ridge = 0.02) {
+    const dims = useTime ? 6 : 2;
+    const beta = new Array(dims).fill(0);
+    const n = Math.max(1, samples.length);
+    for (let iter = 0; iter < 700; iter++) {
+      const grad = new Array(dims).fill(0);
+      for (const s of samples) {
+        const x = modelVector(s, useTime);
+        const p = sigmoid(dot(beta, x));
+        const e = s.y - p;
+        for (let j = 0; j < dims; j++) grad[j] += e * x[j];
+      }
+      for (let j = 1; j < dims; j++) grad[j] -= ridge * beta[j];
+      const rate = 0.45 / Math.sqrt(1 + iter / 80);
+      let maxStep = 0;
+      for (let j = 0; j < dims; j++) {
+        const step = rate * grad[j] / n;
+        beta[j] += step;
+        maxStep = Math.max(maxStep, Math.abs(step));
+      }
+      if (iter > 80 && maxStep < 1e-7) break;
+    }
+    return beta;
+  }
+
+  function probabilityFor(sample, coefficients, useTime = true) {
+    return sigmoid(dot(coefficients, modelVector(sample, useTime)));
+  }
+
+  function median(values) {
+    if (!values.length) return 0;
+    const a = values.slice().sort((x,y) => x-y);
+    const m = Math.floor(a.length / 2);
+    return a.length % 2 ? a[m] : (a[m-1] + a[m]) / 2;
+  }
+
+  function buildExpectedMoveTable(train) {
+    const table = {};
+    const globalMedian = median(train.map(s => s.absReturn));
+    for (let score = -9; score <= 9; score++) {
+      let pool = train.filter(s => Math.abs(s.score - score) <= 1);
+      let radius = 1;
+      if (pool.length < MIN_NEARBY) {
+        pool = train.filter(s => Math.abs(s.score - score) <= 2);
+        radius = 2;
+      }
+      if (pool.length < MIN_NEARBY) {
+        pool = train;
+        radius = 99;
+      }
+      table[score] = {
+        move:pool.length ? median(pool.map(s => s.absReturn)) : globalMedian,
+        n:pool.length,
+        radius
+      };
+    }
+    return table;
+  }
+
+  function buildExpectedMoveByScoreHour(train, scoreFallback) {
+    const table = {};
+    for (let score = -9; score <= 9; score++) {
+      table[score] = {};
+      for (let hour = 0; hour < 24; hour++) {
+        let pool = train.filter(s =>
+          Math.abs(s.score - score) <= 1 &&
+          circularHourDistance(s.utcHour, hour) <= 1
+        );
+        let mode = "±1 score / ±1 hour";
+
+        if (pool.length < MIN_NEARBY) {
+          pool = train.filter(s =>
+            Math.abs(s.score - score) <= 2 &&
+            circularHourDistance(s.utcHour, hour) <= 2
+          );
+          mode = "±2 score / ±2 hours";
+        }
+
+        if (pool.length < MIN_NEARBY) {
+          const fallback = scoreFallback[score];
+          table[score][hour] = {
+            move:fallback.move,
+            n:fallback.n,
+            mode:"score-only fallback"
+          };
+        } else {
+          table[score][hour] = {
+            move:median(pool.map(s => s.absReturn)),
+            n:pool.length,
+            mode
+          };
+        }
+      }
+    }
+    return table;
+  }
+
+  function evaluateOOS(verify, coefficients, useTime = true) {
+    let correct = 0, brier = 0;
+    for (const s of verify) {
+      const p = probabilityFor(s, coefficients, useTime);
+      const pred = p >= 0.5 ? 1 : 0;
+      if (pred === s.y) correct++;
+      const d = p - s.y;
+      brier += d * d;
+    }
+    return {
+      accuracy:verify.length ? correct / verify.length : 0,
+      brier:verify.length ? brier / verify.length : 0
+    };
+  }
+
+  function buildHourlyOOSStats(verify, coefficients) {
+    const buckets = {};
+    for (let hour = 0; hour < 24; hour++) buckets[hour] = {n:0, correct:0, brierSum:0, moves:[]};
+    for (const s of verify) {
+      const p = probabilityFor(s, coefficients, true);
+      const pred = p >= 0.5 ? 1 : 0;
+      const b = buckets[s.utcHour];
+      b.n++;
+      if (pred === s.y) b.correct++;
+      const d = p - s.y;
+      b.brierSum += d * d;
+      b.moves.push(s.absReturn);
+    }
+    const out = {};
+    for (let hour = 0; hour < 24; hour++) {
+      const b = buckets[hour];
+      out[hour] = {
+        n:b.n,
+        accuracy:b.n ? b.correct / b.n : null,
+        brier:b.n ? b.brierSum / b.n : null,
+        medianMove:b.moves.length ? median(b.moves) : null
+      };
+    }
+    return out;
+  }
+
+  function calibrate(samples, sourceFetchedAt) {
+    if (samples.length < 1000) throw new Error("Not enough historical forecasting samples to calibrate.");
+    const split = Math.floor(samples.length * 0.70);
+    const train = samples.slice(0, split);
+    const verify = samples.slice(split);
+
+    const coefficients = fitLogistic(train, true);
+    const baselineCoefficients = fitLogistic(train, false);
+    const oos = evaluateOOS(verify, coefficients, true);
+    const baselineOos = evaluateOOS(verify, baselineCoefficients, false);
+
+    const expectedMoveByScore = buildExpectedMoveTable(train);
+    const expectedMoveByScoreHour = buildExpectedMoveByScoreHour(train, expectedMoveByScore);
+    const hourlyOOS = buildHourlyOOSStats(verify, coefficients);
+
+    const model = {
+      version:2,
+      product:PRODUCT,
+      calibratedAt:Date.now(),
+      sourceFetchedAt,
+      coefficients,
+      baselineCoefficients,
+      expectedMoveByScore,
+      expectedMoveByScoreHour,
+      hourlyOOS,
+      total:samples.length,
+      trainCount:train.length,
+      verifyCount:verify.length,
+      accuracy:oos.accuracy,
+      brier:oos.brier,
+      baselineAccuracy:baselineOos.accuracy,
+      baselineBrier:baselineOos.brier,
+      trainStart:train[0].timestamp,
+      trainEnd:train[train.length-1].timestamp,
+      verifyStart:verify[0].timestamp,
+      verifyEnd:verify[verify.length-1].timestamp,
+      settings:SETTINGS
+    };
+
+    saveLocal(MODEL_KEY, model);
+    saveLocal(CALIBRATION_KEY, {
+      calibratedAt:model.calibratedAt,
+      total:model.total,
+      trainCount:model.trainCount,
+      verifyCount:model.verifyCount,
+      accuracy:model.accuracy,
+      brier:model.brier,
+      baselineAccuracy:model.baselineAccuracy,
+      baselineBrier:model.baselineBrier,
+      trainStart:model.trainStart,
+      trainEnd:model.trainEnd,
+      verifyStart:model.verifyStart,
+      verifyEnd:model.verifyEnd
+    });
+    return model;
+  }
+
+  function renderDashboard(model) {
+    if (!model) return;
+    ui.mTotal.textContent = model.total.toLocaleString();
+    ui.mTrain.textContent = model.trainCount.toLocaleString();
+    ui.mVerify.textContent = model.verifyCount.toLocaleString();
+    ui.mAccuracy.textContent = fmtPct(model.accuracy);
+    ui.mBrier.textContent = Number.isFinite(model.brier) ? model.brier.toFixed(3) : "—";
+    ui.mCoeffs.textContent = Array.isArray(model.coefficients) ? "Score + UTC clock · " + model.coefficients.length + " β" : "—";
+    ui.mBaseAccuracy.textContent = fmtPct(model.baselineAccuracy);
+    ui.mBaseBrier.textContent = Number.isFinite(model.baselineBrier) ? model.baselineBrier.toFixed(3) : "—";
+    const lift = Number.isFinite(model.accuracy) && Number.isFinite(model.baselineAccuracy) ? (model.accuracy - model.baselineAccuracy) * 100 : null;
+    ui.mAccuracyLift.textContent = Number.isFinite(lift) ? (lift >= 0 ? "+" : "") + lift.toFixed(1) + " pp" : "—";
+    ui.mAccuracyLift.style.color = Number.isFinite(lift) ? (lift > 0 ? "var(--up)" : lift < 0 ? "var(--down)" : "var(--text)") : "";
+    ui.mTrainRange.textContent = fmtRange(model.trainStart, model.trainEnd);
+    ui.mVerifyRange.textContent = fmtRange(model.verifyStart, model.verifyEnd);
+  }
+
+  async function ensureCalibration(force = false) {
+    if (state.isCalibrating) return;
+    state.isCalibrating = true;
+    ui.recalibrateBtn.disabled = true;
+    try {
+      const history = await downloadHistory(force);
+      state.candles = history.candles;
+
+      const cachedModel = !force ? loadLocal(MODEL_KEY) : null;
+      if (cachedModel && cachedModel.version === 2 && cachedModel.sourceFetchedAt === history.fetchedAt &&
+          Array.isArray(cachedModel.coefficients) && cachedModel.coefficients.length === 6) {
+        state.model = cachedModel;
+        renderDashboard(state.model);
+        setStatus("DOGE model ready", "Using a recent locally cached calibration.", "ok");
+        return;
+      }
+
+      setStatus("Building historical signals…", "Reconstructing each forecast from information available before its window.", "", 0.64);
+      await sleep(20);
+      state.samples = buildSamples(state.candles);
+
+      setStatus("Calibrating time-aware probability model…", state.samples.length.toLocaleString() + " windows · score + cyclical UTC clock + day-of-week.", "", 0.74);
+      await sleep(20);
+
+      setStatus("Calibrating expected movement…", "Building DOGE score-and-hour median move estimates with score-only fallback.", "", 0.84);
+      await sleep(20);
+
+      setStatus("Running out-of-sample verification…", "Freezing the first 70% model and testing the newest 30%.", "", 0.92);
+      state.model = calibrate(state.samples, history.fetchedAt);
+      renderDashboard(state.model);
+
+      setStatus("Complete", "DOGE time-aware calibration and chronological verification are ready.", "ok", 1);
+      await sleep(450);
+      setStatus("DOGE model ready", state.model.total.toLocaleString() + " historical windows calibrated with time-of-day features and verified.", "ok");
+    } finally {
+      state.isCalibrating = false;
+      ui.recalibrateBtn.disabled = false;
+    }
+  }
+
+  function getLedger() {
+    const rows = loadLocal(PREDICTIONS_KEY, []);
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  function saveLedger(rows) {
+    rows.sort((a,b) => a.start - b.start);
+    saveLocal(PREDICTIONS_KEY, rows.slice(-30));
+  }
+
+  function renderHistory() {
+    const rows = getLedger().slice().sort((a,b) => b.start - a.start).slice(0,8);
+    if (!rows.length) {
+      ui.historyList.innerHTML = '<div class="empty">No predictions yet. The first locked quarter-hour forecast will appear here.</div>';
+      return;
+    }
+    ui.historyList.innerHTML = rows.map(p => {
+      const dirClass = p.direction === "Higher" ? "up" : "down";
+      const result = ["WIN","LOSS","PUSH"].includes(p.result) ? p.result : "PENDING";
+      const actual = Number.isFinite(p.actualClose) ? " · actual " + fmtPrice(p.actualClose) : "";
+      return '<div class="history-row">' +
+        '<div class="history-main"><div class="history-window">' + fmtTime(p.start) + '–' + fmtTime(p.end) + '</div>' +
+        '<div class="history-sub">target ' + fmtPrice(p.predictedPrice) + actual + '</div></div>' +
+        '<div class="history-dir ' + dirClass + '">' + p.direction + ' ' + (p.confidence*100).toFixed(1) + '%</div>' +
+        '<div class="result ' + result + '">' + result + '</div></div>';
+    }).join("");
+  }
+
+  function renderPrediction(p) {
+    state.activePrediction = p || null;
+    if (!p) return;
+    const up = p.direction === "Higher";
+    ui.predictedPrice.textContent = fmtPrice(p.predictedPrice);
+    ui.direction.textContent = p.direction + " " + (p.confidence * 100).toFixed(1) + "%";
+    ui.direction.className = "direction " + (up ? "up" : "down");
+    ui.confidenceLabel.textContent = "Calibrated confidence";
+    ui.lockedPrice.textContent = fmtPrice(p.lockedPrice);
+    ui.windowLabel.textContent = fmtTime(p.start) + " → " + fmtTime(p.end);
+    ui.signalScore.textContent = (p.score > 0 ? "+" : "") + p.score;
+    ui.signalScore.className = "stat-value " + (p.score > 0 ? "score-pos" : p.score < 0 ? "score-neg" : "");
+    ui.expectedMove.textContent = fmtPct(p.expectedMove, 2);
+    const hour = Number.isFinite(p.utcHour) ? p.utcHour : timeFeatures(p.start).utcHour;
+    ui.timeBucket.textContent = fmtUtcHour(hour);
+    const hourStats = hourlyOOSForTimestamp(p.start);
+    ui.hourAccuracy.textContent = hourStats && Number.isFinite(hourStats.accuracy)
+      ? fmtPct(hourStats.accuracy) + " · n=" + hourStats.n
+      : "—";
+    updateCountdown();
+  }
+
+  function updateCountdown() {
+    const p = state.activePrediction;
+    if (!p) { ui.countdown.textContent = "—"; return; }
+    const remain = Math.max(0, p.end - Date.now());
+    const totalSec = Math.ceil(remain / 1000);
+    const mm = String(Math.floor(totalSec / 60)).padStart(2,"0");
+    const ss = String(totalSec % 60).padStart(2,"0");
+    ui.countdown.textContent = mm + ":" + ss;
+  }
+
+  async function fetchLiveContext(boundaryMs) {
+    const boundarySec = Math.floor(boundaryMs / 1000);
+    const startSec = boundarySec - 90 * GRANULARITY;
+    const endSec = boundarySec + GRANULARITY;
+    const url = API + "/products/" + PRODUCT + "/candles?granularity=" + GRANULARITY +
+      "&start=" + encodeURIComponent(new Date(startSec * 1000).toISOString()) +
+      "&end=" + encodeURIComponent(new Date(endSec * 1000).toISOString());
+    const data = await fetchJSON(url, 2);
+    const candles = validateAndSort(data);
+    const current = candles.find(c => c.time === boundarySec);
+    if (!current) throw new Error("The exact Coinbase quarter-hour candle is not available yet.");
+    const idx = candles.findIndex(c => c.time === boundarySec);
+    const preceding = candles.slice(0, idx);
+    if (preceding.length < SETTINGS.warmup + 2) throw new Error("Not enough completed candles for the live signal.");
+    return {current, preceding};
+  }
+
+  function expectedMoveForScoreAndTime(score, timestampMs) {
+    if (!state.model) return {move:0, source:"unavailable", n:0};
+    const hour = timeFeatures(timestampMs).utcHour;
+    const byScoreHour = state.model.expectedMoveByScoreHour &&
+      state.model.expectedMoveByScoreHour[String(score)] &&
+      state.model.expectedMoveByScoreHour[String(score)][String(hour)];
+    if (byScoreHour && Number.isFinite(byScoreHour.move)) return byScoreHour;
+
+    const byScore = state.model.expectedMoveByScore &&
+      (state.model.expectedMoveByScore[String(score)] || state.model.expectedMoveByScore[score]);
+    if (byScore && Number.isFinite(byScore.move)) return byScore;
+
+    const candidates = Object.values(state.model.expectedMoveByScore || {}).map(v => v.move).filter(Number.isFinite);
+    return {move:median(candidates), source:"global fallback", n:candidates.length};
+  }
+
+  function hourlyOOSForTimestamp(timestampMs) {
+    if (!state.model || !state.model.hourlyOOS) return null;
+    const hour = timeFeatures(timestampMs).utcHour;
+    return state.model.hourlyOOS[String(hour)] || state.model.hourlyOOS[hour] || null;
+  }
+
+  function liveScore(preceding) {
+    const ctx = buildIndicatorContext(preceding);
+    return scoreAtCompletedIndex(preceding, ctx, preceding.length - 1);
+  }
+
+  async function createPredictionForBoundary(boundaryMs) {
+    if (!state.model) throw new Error("Model calibration is not ready.");
+    const existing = getLedger().find(p => p.start === boundaryMs);
+    if (existing) {
+      renderPrediction(existing);
+      return existing;
+    }
+
+    setStatus("Creating locked forecast…", "Reading the official DOGE-USD quarter-hour open and completed pre-window candles.");
+    const context = await fetchLiveContext(boundaryMs);
+    const signal = liveScore(context.preceding);
+    if (!signal) throw new Error("Unable to calculate a complete live signal.");
+    const score = signal.score;
+    const tf = timeFeatures(boundaryMs);
+    const liveSample = {
+      score,
+      timeSin:tf.timeSin,
+      timeCos:tf.timeCos,
+      daySin:tf.daySin,
+      dayCos:tf.dayCos
+    };
+    const pHigher = probabilityFor(liveSample, state.model.coefficients, true);
+    const direction = pHigher >= 0.5 ? "Higher" : "Lower";
+    const confidence = direction === "Higher" ? pHigher : 1 - pHigher;
+    const moveInfo = expectedMoveForScoreAndTime(score, boundaryMs);
+    const expectedMove = moveInfo.move;
+    const lockedPrice = context.current.open;
+    const predictedPrice = lockedPrice * Math.exp(direction === "Higher" ? expectedMove : -expectedMove);
+
+    if (![lockedPrice,predictedPrice,confidence,pHigher,expectedMove].every(Number.isFinite)) {
+      throw new Error("A live forecast calculation returned a non-finite value.");
+    }
+
+    const prediction = {
+      version:2,
+      start:boundaryMs,
+      end:boundaryMs + INTERVAL_MS,
+      lockedPrice,
+      predictedPrice,
+      direction,
+      confidence,
+      pHigher,
+      score,
+      expectedMove,
+      expectedMoveSource:moveInfo.mode || moveInfo.source || "time-aware",
+      expectedMoveSampleSize:Number.isFinite(moveInfo.n) ? moveInfo.n : null,
+      utcHour:tf.utcHour,
+      utcMinute:tf.utcMinute,
+      result:"PENDING",
+      createdAt:Date.now()
+    };
+
+    const ledger = getLedger().filter(p => p.start !== boundaryMs);
+    ledger.push(prediction);
+    saveLedger(ledger);
+    renderPrediction(prediction);
+    renderHistory();
+    setStatus("Forecast locked", "Prediction values remain fixed until " + fmtTime(prediction.end) + ".", "ok");
+    return prediction;
+  }
+
+  async function settlePendingPredictions() {
+    const ledger = getLedger();
+    const nowBoundaryMs = Math.floor(Date.now() / INTERVAL_MS) * INTERVAL_MS;
+    const pending = ledger.filter(p => (!p.result || p.result === "PENDING") && p.end <= nowBoundaryMs);
+    if (!pending.length) return;
+
+    const minStart = Math.min(...pending.map(p => p.start));
+    const maxEnd = Math.max(...pending.map(p => p.end));
+    const startSec = Math.floor(minStart / 1000);
+    const endSec = Math.floor(maxEnd / 1000);
+    const url = API + "/products/" + PRODUCT + "/candles?granularity=" + GRANULARITY +
+      "&start=" + encodeURIComponent(new Date(startSec * 1000).toISOString()) +
+      "&end=" + encodeURIComponent(new Date(endSec * 1000).toISOString());
+    const rows = validateAndSort(await fetchJSON(url, 2));
+    const byTime = new Map(rows.map(c => [c.time, c]));
+
+    let changed = false;
+    for (const p of ledger) {
+      if ((!p.result || p.result === "PENDING") && p.end <= nowBoundaryMs) {
+        const c = byTime.get(Math.floor(p.start / 1000));
+        if (!c || !Number.isFinite(c.close)) continue;
+        p.actualClose = c.close;
+        const eps = Math.max(1e-10, p.lockedPrice * 1e-10);
+        const actualDirection = Math.abs(c.close - p.lockedPrice) <= eps ? "Flat" : c.close > p.lockedPrice ? "Higher" : "Lower";
+        p.actualDirection = actualDirection;
+        p.result = actualDirection === "Flat" ? "PUSH" : actualDirection === p.direction ? "WIN" : "LOSS";
+        p.settledAt = Date.now();
+        changed = true;
+      }
+    }
+    if (changed) {
+      saveLedger(ledger);
+      renderHistory();
+    }
+  }
+
+  async function refreshTicker() {
+    try {
+      const data = await fetchJSON(API + "/products/" + PRODUCT + "/ticker", 1);
+      const price = finiteNumber(data && data.price);
+      if (price !== null && price > 0) {
+        state.lastTicker = price;
+        ui.livePrice.textContent = fmtPrice(price);
+      }
+    } catch (err) {
+      console.warn("Ticker refresh failed", err);
+    }
+  }
+
+  async function quarterHourCheck() {
+    if (!state.model) return;
+    const boundaryMs = Math.floor(Date.now() / INTERVAL_MS) * INTERVAL_MS;
+    if (state.currentBoundary === boundaryMs && state.activePrediction && state.activePrediction.start === boundaryMs) return;
+    state.currentBoundary = boundaryMs;
+
+    try {
+      await settlePendingPredictions();
+      const existing = getLedger().find(p => p.start === boundaryMs);
+      if (existing) {
+        renderPrediction(existing);
+        setStatus("Forecast restored", "Loaded the locked forecast for the current quarter-hour window.", "ok");
+      } else {
+        await createPredictionForBoundary(boundaryMs);
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus("Forecast waiting for Coinbase", err.message + " Retrying automatically.", "error");
+      state.currentBoundary = null;
+    }
+  }
+
+  async function start(force = false) {
+    try {
+      await ensureCalibration(force);
+      await settlePendingPredictions();
+      renderHistory();
+      await quarterHourCheck();
+      await refreshTicker();
+    } catch (err) {
+      console.error(err);
+      setStatus("DOGE model could not initialize", err.message || "Unknown error. Use Re-run calibration to retry.", "error");
+    }
+  }
+
+  ui.recalibrateBtn.addEventListener("click", async () => {
+    if (state.isCalibrating) return;
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+      localStorage.removeItem(MODEL_KEY);
+      localStorage.removeItem(CALIBRATION_KEY);
+    } catch {}
+    await start(true);
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      state.currentBoundary = null;
+      quarterHourCheck();
+      refreshTicker();
+    }
+  });
+
+  setInterval(updateCountdown, 1000);
+  setInterval(refreshTicker, 5000);
+  setInterval(quarterHourCheck, 5000);
+
+  renderHistory();
+  start(false);
+})();
+</script>
+</body>
+</html>
