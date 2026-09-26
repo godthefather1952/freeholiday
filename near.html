@@ -127,8 +127,8 @@
       <h2 class="section-title">Calibration dashboard</h2>
       <div class="stat-grid">
         <div class="stat"><div class="label">Historical windows</div><div id="histWindows" class="n mono">—</div></div>
-        <div class="stat"><div class="label">70% calibration</div><div id="calWindows" class="n mono">—</div></div>
-        <div class="stat"><div class="label">30% verification</div><div id="verWindows" class="n mono">—</div></div>
+        <div class="stat"><div class="label">60% training</div><div id="calWindows" class="n mono">—</div></div>
+        <div class="stat"><div class="label">20% untouched test</div><div id="verWindows" class="n mono">—</div></div>
         <div class="stat"><div class="label">OOS directional accuracy</div><div id="oosAccuracy" class="n mono">—</div></div>
         <div class="stat"><div class="label">OOS Brier score</div><div id="brier" class="n mono">—</div></div>
         <div class="stat"><div class="label">Model coefficients</div><div id="coeffs" class="n mono" style="font-size:13px">—</div></div>
@@ -137,7 +137,7 @@
         <div class="metric"><div class="label">Calibration date range</div><div id="calRange" class="value small">—</div></div>
         <div class="metric"><div class="label">Verification date range</div><div id="verRange" class="value small">—</div></div>
       </div>
-      <p class="explain">The model is calibrated on older NEAR/USD history and verified on the most recent 30% of the historical sample. Its probability and expected movement are learned only from NEAR/USD data.</p>
+      <p class="explain">The model trains on the oldest 60% of NEAR/USD history, uses the next 20% to learn the Tight Mode cutoff, and verifies on the newest untouched 20%. Its probability and expected movement are learned only from NEAR/USD data.</p>
       <div class="actions">
         <button id="recalibrateBtn" class="btn primary">Re-run calibration</button>
         <button id="retryBtn" class="btn">Retry market data</button>
@@ -383,29 +383,78 @@
       return median(matches.map(function(s){return s.absMove;}));
     }
 
+    function probabilityFromScore(score,co){
+      return clamp(sigmoid(co.a+co.b*score),0.001,0.999);
+    }
+
+    function thresholdStats(samples,co,threshold){
+      var qualified=0,correct=0;
+      for(var i=0;i<samples.length;i++){
+        var p=probabilityFromScore(samples[i].score,co);
+        var confidence=p>=0.5?p:1-p;
+        if(confidence+1e-12<threshold) continue;
+        qualified++;
+        if((p>=0.5?1:0)===samples[i].y) correct++;
+      }
+      var accuracy=qualified?correct/qualified:NaN;
+      var coverage=samples.length?qualified/samples.length:0;
+      var lower=qualified&&Number.isFinite(accuracy)
+        ? accuracy-1.96*Math.sqrt(Math.max(0,accuracy*(1-accuracy)/qualified))
+        : -Infinity;
+      return {threshold:threshold,count:qualified,accuracy:accuracy,coverage:coverage,lower:lower};
+    }
+
+    function chooseTightThreshold(validation,co){
+      var minCount=Math.max(100,Math.ceil(validation.length*0.20));
+      var best=null;
+      for(var step=0;step<=60;step++){
+        var threshold=0.50+step*0.005;
+        var s=thresholdStats(validation,co,threshold);
+        if(s.count<minCount) continue;
+        if(!best || s.lower>best.lower+1e-9 ||
+          (Math.abs(s.lower-best.lower)<=1e-9 && s.accuracy>best.accuracy+1e-9) ||
+          (Math.abs(s.lower-best.lower)<=1e-9 && Math.abs(s.accuracy-best.accuracy)<=1e-9 && s.coverage>best.coverage)){
+          best=s;
+        }
+      }
+      return best || thresholdStats(validation,co,0.50);
+    }
+
     function calibrate(candles){
       setStatus('Building historical signals…','Applying completed-candle indicators without look-ahead.','working');
       var samples=buildSamples(candles);
       if(samples.length<1000) throw new Error('Too few usable forecasting samples.');
-      var cut=Math.floor(samples.length*0.70);
-      var training=samples.slice(0,cut), verification=samples.slice(cut);
-      setStatus('Calibrating probability model…','Fitting NEAR-only logistic regression on the oldest 70%.','working');
+      var trainEnd=Math.floor(samples.length*0.60);
+      var validationEnd=Math.floor(samples.length*0.80);
+      var training=samples.slice(0,trainEnd);
+      var validation=samples.slice(trainEnd,validationEnd);
+      var verification=samples.slice(validationEnd);
+      setStatus('Calibrating probability model…','Fitting NEAR-only logistic regression on the oldest 60%.','working');
       var co=fitLogistic(training);
       var correct=0,brierSum=0;
       for(var i=0;i<verification.length;i++){
-        var p=clamp(sigmoid(co.a+co.b*verification[i].score),0.001,0.999);
+        var p=probabilityFromScore(verification[i].score,co);
         var pred=p>=0.5?1:0;
         if(pred===verification[i].y) correct++;
         var d=p-verification[i].y;brierSum+=d*d;
       }
+      var tight=chooseTightThreshold(validation,co);
+      var tightTest=thresholdStats(verification,co,tight.threshold);
       var byScore={};
       for(var score=-9;score<=9;score++) byScore[String(score)]=expectedMoveForScore(training,score);
       var model={
-        version:1,product:PRODUCT,generatedAt:Date.now(),a:co.a,b:co.b,
-        total:samples.length,calibrationCount:training.length,verificationCount:verification.length,
+        version:2,product:PRODUCT,generatedAt:Date.now(),a:co.a,b:co.b,
+        total:samples.length,calibrationCount:training.length,validationCount:validation.length,verificationCount:verification.length,
         accuracy:verification.length?correct/verification.length:0,
         brier:verification.length?brierSum/verification.length:0,
+        tightThreshold:tight.threshold,
+        tightValidationAccuracy:tight.accuracy,
+        tightValidationCoverage:tight.coverage,
+        tightAccuracy:tightTest.accuracy,
+        tightCoverage:tightTest.coverage,
+        tightCount:tightTest.count,
         calStart:training[0].t,calEnd:training[training.length-1].t,
+        validationStart:validation[0].t,validationEnd:validation[validation.length-1].t,
         verStart:verification[0].t,verEnd:verification[verification.length-1].t,
         expectedMoveByScore:byScore,
         fallbackExpectedMove:median(training.map(function(s){return s.absMove;})),
@@ -421,7 +470,7 @@
       el.histWindows.textContent=m.total.toLocaleString();
       el.calWindows.textContent=m.calibrationCount.toLocaleString();
       el.verWindows.textContent=m.verificationCount.toLocaleString();
-      el.oosAccuracy.textContent=fmtPct(m.accuracy,1);
+      el.oosAccuracy.textContent=fmtPct(m.tightAccuracy,1);
       el.brier.textContent=Number.isFinite(m.brier)?m.brier.toFixed(3):'—';
       el.coeffs.textContent='a '+m.a.toFixed(4)+' · b '+m.b.toFixed(4);
       el.calRange.textContent=fmtDate(m.calStart)+' → '+fmtDate(m.calEnd);
@@ -459,9 +508,15 @@
         return;
       }
       el.predictedPrice.textContent=fmtPrice(p.predictedPrice);
-      el.directionPill.className='direction '+(p.direction==='Higher'?'higher':'lower');
-      el.directionPill.textContent=p.direction+' '+fmtPct(p.confidence,1);
-      el.heroNote.textContent='Calibrated confidence from NEAR-only historical outcomes.';
+      if(p.qualified===false){
+        el.directionPill.className='direction pending';
+        el.directionPill.textContent='PASS · '+fmtPct(p.confidence,1);
+        el.heroNote.textContent='Below Tight Mode cutoff '+fmtPct(state.model.tightThreshold,1)+'; stored for research but not counted as a qualified call.';
+      }else{
+        el.directionPill.className='direction '+(p.direction==='Higher'?'higher':'lower');
+        el.directionPill.textContent=p.direction+' '+fmtPct(p.confidence,1);
+        el.heroNote.textContent='Qualified by the learned Tight Mode cutoff '+fmtPct(state.model.tightThreshold,1)+'.';
+      }
       el.lockedPrice.textContent=fmtPrice(p.lockedPrice);
       el.windowLabel.textContent=fmtTime(p.start)+' → '+fmtTime(p.end);
       el.signalScore.textContent=(p.score>0?'+':'')+p.score;
@@ -516,6 +571,7 @@
       var pred={
         start:boundaryMs,end:boundaryMs+INTERVAL_MS,lockedPrice:candle.o,predictedPrice:predicted,
         direction:direction,confidence:confidence,pHigher:p,score:score,expectedMove:move,
+        qualified:confidence>=state.model.tightThreshold,tightThreshold:state.model.tightThreshold,
         createdAt:Date.now(),result:'PENDING'
       };
       var items=ledger().filter(function(x){return x.start!==pred.start;});items.push(pred);saveLedger(items);
@@ -564,7 +620,15 @@
       try{
         await settlePending(start);
         var saved=findSavedPrediction(start);
-        if(saved){renderPrediction(saved);setStatus('Forecast restored','This quarter-hour prediction was restored from local storage.','done');}
+        if(saved){
+          saved.qualified=saved.confidence>=state.model.tightThreshold;
+          saved.tightThreshold=state.model.tightThreshold;
+          var savedItems=ledger();
+          for(var si=0;si<savedItems.length;si++) if(savedItems[si].start===saved.start) savedItems[si]=saved;
+          saveLedger(savedItems);
+          renderPrediction(saved);
+          setStatus('Forecast restored','This quarter-hour prediction was restored from local storage.','done');
+        }
         else{
           var p=await createPrediction(start);renderPrediction(p);setStatus('Forecast locked','Prediction remains fixed until '+fmtTime(p.end)+'.','done');
         }
@@ -580,14 +644,14 @@
       try{
         var cache=safeParse(HISTORY_KEY,null),model=safeParse(MODEL_KEY,null),now=Date.now();
         var validCache=cache&&cache.product===PRODUCT&&Array.isArray(cache.candles)&&(now-cache.cachedAt)<CACHE_MS;
-        var validModel=model&&model.product===PRODUCT&&(now-model.generatedAt)<CACHE_MS;
+        var validModel=model&&model.version===2&&model.product===PRODUCT&&(now-model.generatedAt)<CACHE_MS;
         if(force){validCache=false;validModel=false;localStorage.removeItem(HISTORY_KEY);localStorage.removeItem(MODEL_KEY);localStorage.removeItem(CALIBRATION_KEY);}
         if(validCache){state.historyCandles=normalizeCandles(cache.candles);}
         else{state.historyCandles=await downloadHistory();}
         if(validModel){state.model=model;setStatus('Using cached NEAR calibration','Historical dataset and model are less than six hours old.','done');}
         else{
           state.model=calibrate(state.historyCandles);
-          setStatus('Calibration complete','Out-of-sample verification finished on the newest 30% of NEAR history.','done');
+          setStatus('Calibration complete','Tight Mode verified on the newest untouched 20% of NEAR history.','done');
         }
         renderModel();
       }catch(e){
