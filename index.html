@@ -108,6 +108,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 .direction.higher{color:var(--up);border-color:rgba(53,214,148,.24);background:rgba(53,214,148,.075)}
 .direction.lower{color:var(--down);border-color:rgba(255,102,133,.25);background:rgba(255,102,133,.075)}
 .direction.pending{color:var(--muted)}
+.direction.pass{color:#f4c35d;border-color:rgba(244,195,93,.26);background:rgba(244,195,93,.075)}
 .window-chip{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 .metrics{
   display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:17px
@@ -173,6 +174,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 .record-cell.WIN{color:var(--up);background:rgba(53,214,148,.075);border-color:rgba(53,214,148,.22)}
 .record-cell.LOSS{color:var(--down);background:rgba(255,102,133,.075);border-color:rgba(255,102,133,.22)}
 .record-cell.PUSH{color:#f4c35d;background:rgba(244,195,93,.07);border-color:rgba(244,195,93,.22)}
+.record-cell.PASS{color:#f4c35d;background:rgba(244,195,93,.055);border-color:rgba(244,195,93,.18)}
 .record-cell.EMPTY{color:#556173}
 .empty-records{
   grid-column:1/-1;text-align:center;padding:18px 8px;color:var(--muted);font-size:11px
@@ -231,7 +233,9 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
           <div class="metric"><div class="label">Live price</div><div class="metric-value" data-bind="live">—</div></div>
           <div class="metric"><div class="label">Time remaining</div><div class="metric-value" data-bind="countdown">—</div></div>
           <div class="metric"><div class="label">Signal score</div><div class="metric-value" data-bind="score">—</div></div>
-          <div class="metric"><div class="label">OOS accuracy</div><div class="metric-value" data-bind="accuracy">—</div></div>
+          <div class="metric"><div class="label">Tight cutoff</div><div class="metric-value" data-bind="threshold">—</div></div>
+          <div class="metric"><div class="label">Tight coverage</div><div class="metric-value" data-bind="coverage">—</div></div>
+          <div class="metric"><div class="label">Tight OOS accuracy</div><div class="metric-value" data-bind="accuracy">—</div></div>
           <div class="metric"><div class="label">OOS Brier</div><div class="metric-value" data-bind="brier">—</div></div>
         </div>
       </div>
@@ -262,7 +266,9 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
           <div class="metric"><div class="label">Live price</div><div class="metric-value" data-bind="live">—</div></div>
           <div class="metric"><div class="label">Time remaining</div><div class="metric-value" data-bind="countdown">—</div></div>
           <div class="metric"><div class="label">Signal score</div><div class="metric-value" data-bind="score">—</div></div>
-          <div class="metric"><div class="label">OOS accuracy</div><div class="metric-value" data-bind="accuracy">—</div></div>
+          <div class="metric"><div class="label">Tight cutoff</div><div class="metric-value" data-bind="threshold">—</div></div>
+          <div class="metric"><div class="label">Tight coverage</div><div class="metric-value" data-bind="coverage">—</div></div>
+          <div class="metric"><div class="label">Tight OOS accuracy</div><div class="metric-value" data-bind="accuracy">—</div></div>
           <div class="metric"><div class="label">OOS Brier</div><div class="metric-value" data-bind="brier">—</div></div>
         </div>
       </div>
@@ -293,7 +299,9 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
           <div class="metric"><div class="label">Live price</div><div class="metric-value" data-bind="live">—</div></div>
           <div class="metric"><div class="label">Time remaining</div><div class="metric-value" data-bind="countdown">—</div></div>
           <div class="metric"><div class="label">Signal score</div><div class="metric-value" data-bind="score">—</div></div>
-          <div class="metric"><div class="label">OOS accuracy</div><div class="metric-value" data-bind="accuracy">—</div></div>
+          <div class="metric"><div class="label">Tight cutoff</div><div class="metric-value" data-bind="threshold">—</div></div>
+          <div class="metric"><div class="label">Tight coverage</div><div class="metric-value" data-bind="coverage">—</div></div>
+          <div class="metric"><div class="label">Tight OOS accuracy</div><div class="metric-value" data-bind="accuracy">—</div></div>
           <div class="metric"><div class="label">OOS Brier</div><div class="metric-value" data-bind="brier">—</div></div>
         </div>
       </div>
@@ -324,8 +332,10 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
           <div class="metric"><div class="label">Live price</div><div class="metric-value" data-bind="live">—</div></div>
           <div class="metric"><div class="label">Time remaining</div><div class="metric-value" data-bind="countdown">—</div></div>
           <div class="metric"><div class="label">Signal score</div><div class="metric-value" data-bind="score">—</div></div>
+          <div class="metric"><div class="label">Tight cutoff</div><div class="metric-value" data-bind="threshold">—</div></div>
+          <div class="metric"><div class="label">Tight coverage</div><div class="metric-value" data-bind="coverage">—</div></div>
           <div class="metric"><div class="label">Expected move</div><div class="metric-value" data-bind="expected">—</div></div>
-          <div class="metric"><div class="label">OOS accuracy</div><div class="metric-value" data-bind="accuracy">—</div></div>
+          <div class="metric"><div class="label">Tight OOS accuracy</div><div class="metric-value" data-bind="accuracy">—</div></div>
           <div class="metric wide"><div class="label">OOS Brier</div><div class="metric-value" data-bind="brier">—</div></div>
         </div>
       </div>
@@ -339,8 +349,8 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
   <section class="records-section" aria-labelledby="recordsTitle">
     <div class="records-head">
       <div>
-        <div class="records-title" id="recordsTitle">Results Ledger</div>
-        <div class="records-sub">Settled quarter-hour forecasts · newest first</div>
+        <div class="records-title" id="recordsTitle">All Results Ledger</div>
+        <div class="records-sub">Every settled forecast, including Tight Mode PASS windows · newest first</div>
       </div>
       <div class="records-summary" id="recordsSummary">No settled results yet</div>
     </div>
@@ -351,6 +361,25 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
         <div class="record-header doge"><strong>DOGE</strong><span>Solsister</span></div>
         <div class="record-header near"><strong>NEAR</strong><span>Protocol</span></div>
         <div class="empty-records">Waiting for settled predictions…</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="records-section" aria-labelledby="tightRecordsTitle">
+    <div class="records-head">
+      <div>
+        <div class="records-title" id="tightRecordsTitle">Tight Results Ledger</div>
+        <div class="records-sub">Only forecasts that cleared each asset's learned confidence cutoff count toward Tight W/L</div>
+      </div>
+      <div class="records-summary" id="tightRecordsSummary">No qualified results yet</div>
+    </div>
+    <div class="records-wrap">
+      <div class="records-grid" id="tightRecordsGrid">
+        <div class="record-header btc"><strong>BTC</strong><span>Sixcents</span></div>
+        <div class="record-header eth"><strong>ETH</strong><span>Bandjovi</span></div>
+        <div class="record-header doge"><strong>DOGE</strong><span>Solsister</span></div>
+        <div class="record-header near"><strong>NEAR</strong><span>Protocol</span></div>
+        <div class="empty-records">Waiting for qualified settled predictions…</div>
       </div>
     </div>
   </section>
@@ -370,17 +399,17 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
   var config={
     btc:{
       frame:"btcEngine",
-      ids:{predicted:"predictedPrice",direction:"prediction",locked:"lockedPrice",live:"livePrice",window:"windowTime",countdown:"countdown",score:"signalScore",accuracy:"oosAccuracy",brier:"brier",status:"heroStatus",state:"backtestStatus"},
+      ids:{predicted:"predictedPrice",direction:"prediction",locked:"lockedPrice",live:"livePrice",window:"windowTime",countdown:"countdown",score:"signalScore",threshold:"tightThreshold",coverage:"tightCoverage",accuracy:"oosAccuracy",brier:"brier",status:"heroStatus",state:"backtestStatus"},
       button:"rerunBtn"
     },
     eth:{
       frame:"ethEngine",
-      ids:{predicted:"predictedPrice",direction:"directionPill",locked:"lockedPrice",live:"livePrice",window:"windowLabel",countdown:"countdown",score:"signalScore",accuracy:"oosAccuracy",brier:"brier",status:"statusSub",state:"statusMain"},
+      ids:{predicted:"predictedPrice",direction:"directionPill",locked:"lockedPrice",live:"livePrice",window:"windowLabel",countdown:"countdown",score:"signalScore",threshold:"tightThreshold",coverage:"tightCoverage",accuracy:"oosAccuracy",brier:"brier",status:"statusSub",state:"statusMain"},
       button:"recalibrateBtn"
     },
     doge:{
       frame:"dogeEngine",
-      ids:{predicted:"predictedPrice",direction:"direction",locked:"lockedPrice",live:"livePrice",window:"windowLabel",countdown:"countdown",score:"signalScore",accuracy:"mAccuracy",brier:"mBrier",status:"statusText",state:"statusTitle"},
+      ids:{predicted:"predictedPrice",direction:"direction",locked:"lockedPrice",live:"livePrice",window:"windowLabel",countdown:"countdown",score:"signalScore",threshold:"tightThreshold",coverage:"tightCoverage",accuracy:"mAccuracy",brier:"mBrier",status:"statusText",state:"statusTitle"},
       button:"recalibrateBtn"
     },
     near:{
@@ -401,7 +430,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     node.textContent=value;
     if(key==="direction"){
       var v=value.toLowerCase();
-      node.className="direction "+(v.indexOf("higher")!==-1?"higher":v.indexOf("lower")!==-1?"lower":"pending");
+      node.className="direction "+(v.indexOf("pass")!==-1?"pass":v.indexOf("higher")!==-1?"higher":v.indexOf("lower")!==-1?"lower":"pending");
     }
   }
 
@@ -487,6 +516,13 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     return d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
   }
 
+  function recordHeaders(){
+    return '<div class="record-header btc"><strong>BTC</strong><span>Sixcents</span></div>'+
+      '<div class="record-header eth"><strong>ETH</strong><span>Bandjovi</span></div>'+
+      '<div class="record-header doge"><strong>DOGE</strong><span>Solsister</span></div>'+
+      '<div class="record-header near"><strong>NEAR</strong><span>Protocol</span></div>';
+  }
+
   function renderRecords(){
     var sources={
       btc:ledgerRows(ledgerKeys.btc),
@@ -501,39 +537,59 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     ["btc","eth","doge","near"].forEach(function(coin){
       sources[coin].forEach(function(row){
         var t=String(Number(row.start));
-        byCoin[coin][t]=row.result;
+        byCoin[coin][t]=row;
         times[t]=true;
       });
     });
 
     var starts=Object.keys(times).map(Number).filter(Number.isFinite).sort(function(a,b){return b-a;}).slice(0,10);
     var grid=document.getElementById("recordsGrid");
+    var tightGrid=document.getElementById("tightRecordsGrid");
     var summary=document.getElementById("recordsSummary");
-    if(!grid) return;
+    var tightSummary=document.getElementById("tightRecordsSummary");
+    if(!grid || !tightGrid) return;
 
-    var out=
-      '<div class="record-header btc"><strong>BTC</strong><span>Sixcents</span></div>'+
-      '<div class="record-header eth"><strong>ETH</strong><span>Bandjovi</span></div>'+
-      '<div class="record-header doge"><strong>DOGE</strong><span>Solsister</span></div>'+
-      '<div class="record-header near"><strong>NEAR</strong><span>Protocol</span></div>';
+    var allOut=recordHeaders();
+    var tightOut=recordHeaders();
 
     if(!starts.length){
-      out+='<div class="empty-records">Waiting for settled predictions…</div>';
+      allOut+='<div class="empty-records">Waiting for settled predictions…</div>';
+      tightOut+='<div class="empty-records">Waiting for qualified settled predictions…</div>';
       if(summary) summary.textContent="No settled results yet";
-      grid.innerHTML=out;
+      if(tightSummary) tightSummary.textContent="No qualified results yet";
+      grid.innerHTML=allOut;
+      tightGrid.innerHTML=tightOut;
       return;
     }
 
     starts.forEach(function(start){
       var end=start+(15*60*1000);
-      out+='<div class="record-time">'+formatRecordTime(start)+'–'+formatRecordTime(end)+'</div>';
+      var timeLabel='<div class="record-time">'+formatRecordTime(start)+'–'+formatRecordTime(end)+'</div>';
+      allOut+=timeLabel;
+      tightOut+=timeLabel;
+
       ["btc","eth","doge","near"].forEach(function(coin){
-        var result=byCoin[coin][String(start)] || "—";
+        var row=byCoin[coin][String(start)];
+        var result=row ? (row.result||"—") : "—";
         var cls=result==="WIN"?"WIN":result==="LOSS"?"LOSS":result==="PUSH"?"PUSH":"EMPTY";
-        out+='<div class="record-cell '+cls+'">'+result+'</div>';
+        allOut+='<div class="record-cell '+cls+'">'+result+'</div>';
+
+        var tightResult="—",tightCls="EMPTY";
+        if(row){
+          if(row.qualified===true){
+            tightResult=result;
+            tightCls=cls;
+          }else if(row.qualified===false){
+            tightResult="PASS";
+            tightCls="PASS";
+          }
+        }
+        tightOut+='<div class="record-cell '+tightCls+'">'+tightResult+'</div>';
       });
     });
-    grid.innerHTML=out;
+
+    grid.innerHTML=allOut;
+    tightGrid.innerHTML=tightOut;
 
     var all=sources.btc.concat(sources.eth,sources.doge,sources.near);
     var wins=all.filter(function(r){return r.result==="WIN";}).length;
@@ -541,6 +597,16 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     var pushes=all.filter(function(r){return r.result==="PUSH";}).length;
     if(summary){
       summary.textContent=wins+"W · "+losses+"L"+(pushes?" · "+pushes+"P":"");
+    }
+
+    var tight=all.filter(function(r){return r.qualified===true;});
+    var tightWins=tight.filter(function(r){return r.result==="WIN";}).length;
+    var tightLosses=tight.filter(function(r){return r.result==="LOSS";}).length;
+    var tightPushes=tight.filter(function(r){return r.result==="PUSH";}).length;
+    var settledTight=tightWins+tightLosses;
+    var hitRate=settledTight ? (tightWins/settledTight*100).toFixed(1)+"%" : "—";
+    if(tightSummary){
+      tightSummary.textContent=tightWins+"W · "+tightLosses+"L"+(tightPushes?" · "+tightPushes+"P":"")+" · "+hitRate;
     }
   }
 
