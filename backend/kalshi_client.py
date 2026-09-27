@@ -184,7 +184,10 @@ class KalshiClient:
 
     async def positions(self) -> dict[str, Any]:
         return await self.request(
-            "GET", "/portfolio/positions", signed=True, params={"limit": 100}
+            "GET",
+            "/portfolio/positions",
+            signed=True,
+            params={"limit": 1000, "count_filter": "position"},
         )
 
     async def fills(self, limit: int = 100) -> dict[str, Any]:
