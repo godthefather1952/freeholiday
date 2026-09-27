@@ -146,6 +146,50 @@ def count_open_positions(payload: dict[str, Any]) -> int:
     return count
 
 
+def estimated_taker_fee(price: float, contracts: int) -> float:
+    if contracts <= 0 or not (0.0 < price < 1.0):
+        return 0.0
+    raw = 0.07 * contracts * price * (1.0 - price)
+    return math.ceil(raw * 100.0) / 100.0
+
+
+def settled_outcome(payload: dict[str, Any]) -> str | None:
+    market = payload.get("market") if isinstance(payload.get("market"), dict) else payload
+    raw = str(
+        market.get("result")
+        or market.get("settlement_result")
+        or market.get("outcome")
+        or ""
+    ).strip().lower()
+    if raw in ("yes", "up", "1", "true"):
+        return "YES"
+    if raw in ("no", "down", "0", "false"):
+        return "NO"
+    return None
+
+
+async def sync_trade_settlements(conn: StoredConnection, kalshi: KalshiClient) -> None:
+    for trade in store.unsettled_trades(conn.id, 50):
+        try:
+            payload = await kalshi.market(str(trade["market_ticker"]))
+        except KalshiError:
+            continue
+        outcome = settled_outcome(payload)
+        if not outcome:
+            continue
+        contracts = int(trade["contracts"])
+        price = float(trade["contract_price"])
+        fee = estimated_taker_fee(price, contracts)
+        won = outcome == str(trade["outcome"]).upper()
+        pnl = contracts * (1.0 - price) - fee if won else -(contracts * price) - fee
+        store.settle_trade(
+            conn.id,
+            int(trade["id"]),
+            status="WIN" if won else "LOSS",
+            pnl=pnl,
+        )
+
+
 def opportunity_payload(
     forecast: Forecast, quote, confirmation: dict[str, Any] | None
 ) -> dict[str, Any]:
@@ -221,6 +265,7 @@ async def execute_confirmed_trade(
             detail="No executable Kalshi quote is available",
         )
 
+    await sync_trade_settlements(conn, kalshi)
     settings = store.get_settings(conn.id)
     try:
         positions = await kalshi.positions()
@@ -348,6 +393,7 @@ async def connect_kalshi(
 async def account(conn: StoredConnection = Depends(connection)):
     kalshi = client_for(conn)
     try:
+        await sync_trade_settlements(conn, kalshi)
         balance = await kalshi.balance()
         positions = await kalshi.positions()
     except (KalshiAuthError, KalshiError) as exc:
@@ -358,6 +404,7 @@ async def account(conn: StoredConnection = Depends(connection)):
         "expires_at": conn.expires_at,
         "balance_dollars": dollars_from_balance(balance),
         "open_positions": count_open_positions(positions),
+        "today_pnl": store.daily_realized_pnl(conn.id),
         "settings": store.get_settings(conn.id),
     }
 
@@ -498,6 +545,11 @@ async def put_settings(
 
 @app.get("/api/kalshi/trades")
 async def trades(conn: StoredConnection = Depends(connection)):
+    kalshi = client_for(conn)
+    try:
+        await sync_trade_settlements(conn, kalshi)
+    except (KalshiError, KalshiAuthError):
+        pass
     return {"trades": store.list_trades(conn.id, 50)}
 
 
