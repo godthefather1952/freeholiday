@@ -17,7 +17,6 @@ def validate_settings(settings: dict[str, Any]) -> dict[str, Any]:
         "max_trade_dollars": (0.10, 10000.0),
         "max_daily_exposure_dollars": (0.10, 100000.0),
         "max_daily_loss_dollars": (0.10, 100000.0),
-        "max_contract_price": (0.01, 0.99),
     }
     for key, (lo, hi) in numeric.items():
         value = float(out[key])
@@ -63,6 +62,4 @@ def check_trade(
         return RiskDecision(False, "Daily loss limit has been reached")
     if open_positions >= int(settings["max_open_positions"]):
         return RiskDecision(False, "Maximum open positions reached")
-    if contract_price > float(settings["max_contract_price"]) + 1e-9:
-        return RiskDecision(False, "Current Kalshi contract price exceeds your maximum")
     return RiskDecision(True)
