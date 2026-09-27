@@ -198,6 +198,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 }
 .kalshi-btn.primary{background:#eef4ff;color:#071019;border-color:#eef4ff}
 .kalshi-btn.good{color:var(--up);border-color:rgba(53,214,148,.3);background:rgba(53,214,148,.08)}
+.kalshi-btn.saved{color:#071019;border-color:var(--up);background:var(--up)}
 .kalshi-btn.warn{color:#f4c35d;border-color:rgba(244,195,93,.3);background:rgba(244,195,93,.07)}
 .kalshi-btn.danger{color:var(--down);border-color:rgba(255,102,133,.3);background:rgba(255,102,133,.07)}
 .kalshi-btn:disabled{opacity:.45;cursor:not-allowed}
@@ -645,7 +646,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 
   var KALSHI_TOKEN_KEY="freeholiday_kalshi_token_v1";
   var KALSHI_DEFAULT_API="https://freeholiday-api.onrender.com";
-  var kalshiState={token:sessionStorage.getItem(KALSHI_TOKEN_KEY)||"",account:null,settings:null,opportunities:[],busy:false,lastWindow:0};
+  var kalshiState={token:sessionStorage.getItem(KALSHI_TOKEN_KEY)||"",account:null,settings:null,opportunities:[],busy:false,lastWindow:0,settingsDirty:false,tradeBusy:{}};
 
   function kalshiBase(){
     return KALSHI_DEFAULT_API;
@@ -752,20 +753,34 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     return out;
   }
 
+  function markGuardrailsDirty(){
+    kalshiState.settingsDirty=true;
+    var btn=document.getElementById("kalshiSaveSettingsBtn");
+    if(btn){btn.textContent="Save Guardrails";btn.className="kalshi-btn";}
+  }
+
+  function markGuardrailsSaved(){
+    kalshiState.settingsDirty=false;
+    var btn=document.getElementById("kalshiSaveSettingsBtn");
+    if(btn){btn.textContent="Saved";btn.className="kalshi-btn saved";}
+  }
+
   function applyKalshiSettings(settings){
     kalshiState.settings=settings||{};
     var s=kalshiState.settings;
-    var set=function(id,value){var el=document.getElementById(id);if(el)el.value=value==null?"":value;};
-    var auto=document.getElementById("kalshiAutoTrade");
-    if(auto)auto.checked=!!s.auto_trade;
-    set("kalshiTradeSize",s.trade_size_dollars);
-    set("kalshiMaxTrade",s.max_trade_dollars);
-    set("kalshiDailyExposure",s.max_daily_exposure_dollars);
-    set("kalshiDailyLoss",s.max_daily_loss_dollars);
-    set("kalshiMaxPositions",s.max_open_positions);
-    document.querySelectorAll("[data-kalshi-asset]").forEach(function(el){
-      el.checked=(s.allowed_assets||[]).indexOf(el.getAttribute("data-kalshi-asset"))!==-1;
-    });
+    if(!kalshiState.settingsDirty){
+      var set=function(id,value){var el=document.getElementById(id);if(el)el.value=value==null?"":value;};
+      var auto=document.getElementById("kalshiAutoTrade");
+      if(auto)auto.checked=!!s.auto_trade;
+      set("kalshiTradeSize",s.trade_size_dollars);
+      set("kalshiMaxTrade",s.max_trade_dollars);
+      set("kalshiDailyExposure",s.max_daily_exposure_dollars);
+      set("kalshiDailyLoss",s.max_daily_loss_dollars);
+      set("kalshiMaxPositions",s.max_open_positions);
+      document.querySelectorAll("[data-kalshi-asset]").forEach(function(el){
+        el.checked=(s.allowed_assets||[]).indexOf(el.getAttribute("data-kalshi-asset"))!==-1;
+      });
+    }
     var state=document.getElementById("kalshiAutoState");
     if(state)state.textContent=s.auto_trade?"ON":"OFF";
   }
@@ -911,8 +926,10 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     };
     try{
       var data=await kalshiFetch("/api/kalshi/settings",{method:"PUT",json:payload});
+      kalshiState.settingsDirty=false;
       applyKalshiSettings(data);
       renderKalshiOpportunities();
+      markGuardrailsSaved();
       setKalshiMessage("Guardrails saved.","ok");
     }catch(e){setKalshiMessage(e.message,"error");}
   }
@@ -939,14 +956,23 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     }catch(e){setKalshiMessage(e.message,"error");}
   }
 
-  async function placeKalshiTrade(asset,windowStart){
-    var amount=kalshiState.settings?Number(kalshiState.settings.trade_size_dollars):2;
+  async function placeKalshiTrade(asset,windowStart,button){
+    var key=asset+":"+windowStart;
+    if(kalshiState.tradeBusy[key])return;
+    kalshiState.tradeBusy[key]=true;
+    var amount=kalshiState.settings?Number(kalshiState.settings.trade_size_dollars):0.10;
+    var originalText=button?button.textContent:"";
+    if(button){button.disabled=true;button.textContent="Submitting…";}
     try{
       setKalshiMessage("Submitting "+asset+" order…","");
       await kalshiFetch("/api/kalshi/orders",{method:"POST",json:{asset:asset,window_start:Number(windowStart),amount_dollars:amount}});
-      setKalshiMessage(asset+" order submitted.","ok");
+      setKalshiMessage(asset+" order submitted. You can place another trade in this same window.","ok");
       await refreshKalshiAll();
     }catch(e){setKalshiMessage(e.message,"error");}
+    finally{
+      delete kalshiState.tradeBusy[key];
+      if(button&&button.isConnected){button.disabled=false;button.textContent=originalText;}
+    }
   }
 
   async function toggleKalshiPause(){
@@ -988,6 +1014,20 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     if(refresh)refresh.addEventListener("click",refreshKalshiAll);
     if(pause)pause.addEventListener("click",toggleKalshiPause);
     if(disconnect)disconnect.addEventListener("click",disconnectKalshi);
+    var guardrailInputs=[
+      "kalshiAutoTrade","kalshiTradeSize","kalshiMaxTrade",
+      "kalshiDailyExposure","kalshiDailyLoss","kalshiMaxPositions"
+    ];
+    guardrailInputs.forEach(function(id){
+      var el=document.getElementById(id);
+      if(el){
+        el.addEventListener("input",markGuardrailsDirty);
+        el.addEventListener("change",markGuardrailsDirty);
+      }
+    });
+    document.querySelectorAll("[data-kalshi-asset]").forEach(function(el){
+      el.addEventListener("change",markGuardrailsDirty);
+    });
     var ops=document.getElementById("kalshiOpportunities");
     if(ops)ops.addEventListener("click",function(e){
       var btn=e.target.closest?e.target.closest("[data-kalshi-action]"):null;
@@ -997,7 +1037,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
       var windowStart=Number(btn.getAttribute("data-window"));
       if(action==="confirm")decideKalshi(asset,windowStart,"confirm");
       else if(action==="skip")decideKalshi(asset,windowStart,"skip");
-      else if(action==="trade")placeKalshiTrade(asset,windowStart);
+      else if(action==="trade")placeKalshiTrade(asset,windowStart,btn);
     });
     if(kalshiState.token)refreshKalshiAll();
     setInterval(function(){if(kalshiState.token)refreshKalshiAll();},15000);
