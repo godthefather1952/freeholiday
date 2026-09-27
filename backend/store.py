@@ -276,6 +276,21 @@ class VaultStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def unsettled_trades(self, connection_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self.conn() as con:
+            rows = con.execute(
+                "SELECT * FROM trades WHERE connection_id=? AND gross_pnl IS NULL ORDER BY created_at ASC LIMIT ?",
+                (connection_id, max(1, min(limit, 200))),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def settle_trade(self, connection_id: str, trade_id: int, *, status: str, pnl: float) -> None:
+        with self.conn() as con:
+            con.execute(
+                "UPDATE trades SET status=?, gross_pnl=? WHERE id=? AND connection_id=?",
+                (status, float(pnl), int(trade_id), connection_id),
+            )
+
     def daily_exposure(self, connection_id: str) -> float:
         now = time.time()
         day_start = now - (now % 86400)
