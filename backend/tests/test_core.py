@@ -1,10 +1,14 @@
+import os
+
+from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
+os.environ.setdefault("FREEHOLIDAY_FERNET_KEY", Fernet.generate_key().decode())
+
+from app import Forecast, entry_engine_analysis
 from kalshi_client import Credentials, Signer
 from risk import check_trade, validate_settings
-from cryptography.fernet import Fernet
-
 from store import DEFAULT_SETTINGS, VaultStore
 
 
@@ -176,3 +180,65 @@ def test_trade_history_includes_kalshi_close(tmp_path):
     assert trade["kalshi_close_price"] == 4201.25
     assert trade["predicted_price"] == 4200.50
     assert trade["threshold"] == 4198.00
+
+
+class _EntryQuote:
+    def __init__(self, threshold, close_ts, yes=0.55, no=0.45):
+        self.threshold = threshold
+        self.close_ts = close_ts
+        self._yes = yes
+        self._no = no
+
+    def outcome_price(self, outcome):
+        return self._yes if outcome == "YES" else self._no
+
+
+def test_entry_v2_does_not_double_count_move():
+    forecast = Forecast(
+        asset="BTC",
+        direction="Higher",
+        predicted_price=102.0,
+        confidence=0.65,
+        window_start=1_000_000,
+        window_end=1_900_000,
+        locked_price=100.0,
+        forecast_error_sigma_pct=0.01,
+        forecast_error_samples=10,
+    )
+    quote = _EntryQuote(threshold=101.0, close_ts=1900.0)
+
+    analysis = entry_engine_analysis(
+        forecast,
+        quote,
+        current_price=102.0,
+        calibration={"samples": 10, "sigma": 0.01, "bias": 0.0},
+        now=1450.0,
+    )
+
+    assert abs(analysis["live_entry_forecast"] - 102.0) < 1e-9
+
+
+def test_entry_v2_respects_late_window_live_price():
+    forecast = Forecast(
+        asset="BTC",
+        direction="Higher",
+        predicted_price=102.0,
+        confidence=0.65,
+        window_start=1_000_000,
+        window_end=1_900_000,
+        locked_price=100.0,
+        forecast_error_sigma_pct=0.01,
+        forecast_error_samples=10,
+    )
+    quote = _EntryQuote(threshold=100.0, close_ts=1900.0)
+
+    analysis = entry_engine_analysis(
+        forecast,
+        quote,
+        current_price=99.0,
+        calibration={"samples": 10, "sigma": 0.01, "bias": 0.0},
+        now=1870.0,
+    )
+
+    assert analysis["live_entry_forecast"] < 100.0
+    assert analysis["suggested_outcome"] == "NO"
