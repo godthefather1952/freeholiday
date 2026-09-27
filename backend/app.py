@@ -57,6 +57,7 @@ class Forecast(BaseModel):
     window_end: int
     locked_price: float | None = Field(default=None, gt=0)
     forecast_error_sigma_pct: float | None = Field(default=None, gt=0)
+    forecast_error_bias_pct: float | None = None
     forecast_error_samples: int = Field(default=0, ge=0)
 
 
@@ -77,6 +78,7 @@ class DecisionRequest(BaseModel):
     forecast_direction: Literal["Higher", "Lower"]
     locked_price: float | None = Field(default=None, gt=0)
     forecast_error_sigma_pct: float | None = Field(default=None, gt=0)
+    forecast_error_bias_pct: float | None = None
     forecast_error_samples: int = Field(default=0, ge=0)
 
 
@@ -263,71 +265,159 @@ def _normal_cdf(z: float) -> float:
     return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
 
 
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    n = len(ordered)
+    if not n:
+        return 0.0
+    mid = n // 2
+    if n % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def kalshi_entry_calibration(
+    connection_id: str,
+    asset: str,
+) -> dict[str, Any]:
+    samples = store.settled_entry_samples(connection_id, asset, 120)
+    residuals: list[float] = []
+    for sample in samples:
+        try:
+            actual = float(sample["kalshi_close_price"])
+            predicted = float(sample["predicted_price"])
+        except (TypeError, ValueError):
+            continue
+        if actual <= 0 or predicted <= 0:
+            continue
+        residual = math.log(actual / predicted)
+        if math.isfinite(residual):
+            residuals.append(residual)
+
+    if not residuals:
+        return {"samples": 0, "bias": 0.0, "sigma": None}
+
+    bias = _median(residuals)
+    deviations = [abs(x - bias) for x in residuals]
+    mad_sigma = 1.4826 * _median(deviations)
+    rms_sigma = math.sqrt(
+        sum((x - bias) ** 2 for x in residuals) / len(residuals)
+    )
+    sigma = max(mad_sigma, rms_sigma, 0.0001)
+    return {
+        "samples": len(residuals),
+        "bias": bias,
+        "sigma": sigma,
+    }
+
+
 def entry_engine_analysis(
     forecast: Forecast,
     quote,
     *,
     current_price: float,
+    calibration: dict[str, Any] | None = None,
     now: float | None = None,
 ) -> dict[str, Any]:
     now = time.time() if now is None else now
-    total_seconds = max(
-        1.0,
-        (float(forecast.window_end) - float(forecast.window_start)) / 1000.0,
-    )
-    remaining_seconds = _clamp(
-        (float(forecast.window_end) / 1000.0) - now,
-        0.0,
-        total_seconds,
-    )
+    total_seconds = 15.0 * 60.0
+    market_close_ts = float(getattr(quote, "close_ts", 0.0) or 0.0)
+    if market_close_ts > 0:
+        remaining_seconds = _clamp(
+            market_close_ts - now,
+            0.0,
+            total_seconds,
+        )
+    else:
+        remaining_seconds = _clamp(
+            (float(forecast.window_end) / 1000.0) - now,
+            0.0,
+            total_seconds,
+        )
     remaining_fraction = remaining_seconds / total_seconds
 
-    confidence_strength = _clamp(
-        (float(forecast.confidence) - 0.5) / 0.5,
-        0.0,
-        1.0,
+    predicted_price = float(forecast.predicted_price)
+    locked_price = (
+        float(forecast.locked_price)
+        if forecast.locked_price
+        else None
     )
-    forecast_weight = remaining_fraction * (
-        0.35 + 0.65 * confidence_strength
-    )
+    if locked_price and locked_price > 0:
+        full_expected_log_move = math.log(
+            predicted_price / locked_price
+        )
+        remaining_expected_log_move = (
+            full_expected_log_move * remaining_fraction
+        )
+        live_entry_forecast = current_price * math.exp(
+            remaining_expected_log_move
+        )
+    else:
+        live_entry_forecast = math.exp(
+            math.log(current_price)
+            + remaining_fraction
+            * (math.log(predicted_price) - math.log(current_price))
+        )
+        full_expected_log_move = math.log(
+            predicted_price / current_price
+        )
+        remaining_expected_log_move = (
+            full_expected_log_move * remaining_fraction
+        )
 
-    log_current = math.log(current_price)
-    log_predicted = math.log(float(forecast.predicted_price))
-    live_entry_forecast = math.exp(
-        log_current
-        + forecast_weight * (log_predicted - log_current)
-    )
+    calibration = calibration or {}
+    calibration_samples = int(calibration.get("samples") or 0)
+    calibration_sigma = calibration.get("sigma")
+    calibration_bias = float(calibration.get("bias") or 0.0)
 
     supplied_sigma = forecast.forecast_error_sigma_pct
+    supplied_bias = float(forecast.forecast_error_bias_pct or 0.0)
     fallback_sigma = ENTRY_FALLBACK_SIGMA[forecast.asset]
+
     if (
+        calibration_samples >= 5
+        and calibration_sigma is not None
+        and math.isfinite(float(calibration_sigma))
+        and float(calibration_sigma) > 0
+    ):
+        sigma_full = float(calibration_sigma)
+        bias_full = calibration_bias
+        error_source = "Kalshi settled history"
+        error_samples = calibration_samples
+    elif (
         supplied_sigma is not None
         and math.isfinite(float(supplied_sigma))
         and float(supplied_sigma) > 0
         and forecast.forecast_error_samples >= 5
     ):
         sigma_full = float(supplied_sigma)
+        bias_full = supplied_bias
         error_source = "local settled forecast errors"
+        error_samples = int(forecast.forecast_error_samples)
     else:
-        original_move = 0.0
-        if forecast.locked_price:
-            original_move = abs(
-                math.log(
-                    float(forecast.predicted_price)
-                    / float(forecast.locked_price)
-                )
-            )
         sigma_full = max(
             fallback_sigma,
-            original_move * 0.75,
+            abs(full_expected_log_move) * 0.75,
         )
+        bias_full = 0.0
         error_source = "asset fallback"
+        error_samples = 0
 
-    sigma_remaining = max(
-        sigma_full * math.sqrt(max(remaining_fraction, 0.01)),
-        sigma_full * 0.10,
-        0.0001,
+    # Apply the historically observed full-window bias only to the
+    # remaining fraction of the current window.
+    live_entry_forecast *= math.exp(
+        bias_full * remaining_fraction
     )
+
+    uncertainty_fraction = max(
+        remaining_fraction,
+        30.0 / total_seconds,
+    )
+    sigma_remaining = max(
+        sigma_full * math.sqrt(uncertainty_fraction),
+        0.00005,
+    )
+
     threshold = float(quote.threshold)
     z = math.log(live_entry_forecast / threshold) / sigma_remaining
     probability_yes = _clamp(_normal_cdf(z), 0.001, 0.999)
@@ -343,11 +433,18 @@ def entry_engine_analysis(
         if contract_price is not None
         else None
     )
-    model_edge = (
-        side_probability - market_implied
-        if market_implied is not None
-        else None
-    )
+    fee_adjusted_breakeven = None
+    model_edge = None
+    if market_implied is not None:
+        fee_per_contract = (
+            0.07 * market_implied * (1.0 - market_implied)
+        )
+        fee_adjusted_breakeven = _clamp(
+            market_implied + fee_per_contract,
+            0.001,
+            0.999,
+        )
+        model_edge = side_probability - fee_adjusted_breakeven
 
     distance_dollars = threshold - current_price
     distance_pct = (threshold / current_price) - 1.0
@@ -357,11 +454,14 @@ def entry_engine_analysis(
         "live_entry_forecast": live_entry_forecast,
         "remaining_seconds": int(round(remaining_seconds)),
         "remaining_fraction": remaining_fraction,
-        "forecast_weight": forecast_weight,
+        "expected_remaining_move_pct": math.exp(
+            remaining_expected_log_move
+        ) - 1.0,
+        "error_bias_pct": bias_full,
         "error_sigma_pct": sigma_full,
         "remaining_error_sigma_pct": sigma_remaining,
         "error_source": error_source,
-        "error_samples": int(forecast.forecast_error_samples or 0),
+        "error_samples": error_samples,
         "distance_to_target": distance_dollars,
         "distance_to_target_pct": distance_pct,
         "probability_yes": probability_yes,
@@ -369,9 +469,9 @@ def entry_engine_analysis(
         "suggested_outcome": suggested_outcome,
         "contract_price": contract_price,
         "market_implied_probability": market_implied,
+        "fee_adjusted_breakeven": fee_adjusted_breakeven,
         "model_edge": model_edge,
     }
-
 
 def opportunity_payload(
     forecast: Forecast,
@@ -409,7 +509,14 @@ def opportunity_payload(
         "market_implied_probability": analysis[
             "market_implied_probability"
         ],
+        "fee_adjusted_breakeven": analysis[
+            "fee_adjusted_breakeven"
+        ],
         "model_edge": analysis["model_edge"],
+        "expected_remaining_move_pct": analysis[
+            "expected_remaining_move_pct"
+        ],
+        "error_bias_pct": analysis["error_bias_pct"],
         "error_sigma_pct": analysis["error_sigma_pct"],
         "remaining_error_sigma_pct": analysis[
             "remaining_error_sigma_pct"
@@ -609,10 +716,15 @@ async def opportunities(
         try:
             quote = await kalshi.current_market(forecast.asset)
             current_price = await coinbase_spot(forecast.asset)
+            calibration = kalshi_entry_calibration(
+                conn.id,
+                forecast.asset,
+            )
             analysis = entry_engine_analysis(
                 forecast,
                 quote,
                 current_price=current_price,
+                calibration=calibration,
             )
             confirmation = store.confirmation(
                 conn.id,
@@ -664,16 +776,22 @@ async def decision(
         window_end=req.window_end,
         locked_price=req.locked_price,
         forecast_error_sigma_pct=req.forecast_error_sigma_pct,
+        forecast_error_bias_pct=req.forecast_error_bias_pct,
         forecast_error_samples=req.forecast_error_samples,
     )
     try:
         current_price = await coinbase_spot(req.asset)
     except KalshiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    calibration = kalshi_entry_calibration(
+        conn.id,
+        req.asset,
+    )
     analysis = entry_engine_analysis(
         forecast,
         quote,
         current_price=current_price,
+        calibration=calibration,
     )
     suggested = str(analysis["suggested_outcome"])
     if suggested != req.suggested_outcome:
@@ -697,6 +815,7 @@ async def decision(
         "confidence": req.confidence,
         "forecast_direction": req.forecast_direction,
         "forecast_error_sigma_pct": req.forecast_error_sigma_pct,
+        "forecast_error_bias_pct": req.forecast_error_bias_pct,
         "forecast_error_samples": req.forecast_error_samples,
         "current_price_at_confirm": analysis["current_price"],
         "live_entry_forecast": analysis["live_entry_forecast"],
@@ -706,7 +825,14 @@ async def decision(
         "market_implied_probability": analysis[
             "market_implied_probability"
         ],
+        "fee_adjusted_breakeven": analysis[
+            "fee_adjusted_breakeven"
+        ],
         "model_edge": analysis["model_edge"],
+        "expected_remaining_move_pct": analysis[
+            "expected_remaining_move_pct"
+        ],
+        "error_bias_pct": analysis["error_bias_pct"],
         "error_sigma_pct": analysis["error_sigma_pct"],
         "remaining_error_sigma_pct": analysis[
             "remaining_error_sigma_pct"
