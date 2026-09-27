@@ -126,3 +126,53 @@ def test_default_supports_four_open_markets():
         paused=False,
     )
     assert allowed.ok
+
+
+def test_trade_history_includes_kalshi_close(tmp_path):
+    store = VaultStore(
+        str(tmp_path / "close.db"),
+        Fernet.generate_key().decode(),
+    )
+    connection_id, _ = store.create_connection(
+        "test-key",
+        "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+    )
+    store.save_confirmation(
+        connection_id,
+        asset="ETH",
+        window_start=2222222222,
+        market_ticker="KXETH15M-TEST",
+        decision="confirm",
+        payload={
+            "predicted_price": 4200.50,
+            "threshold": 4198.00,
+            "suggested_outcome": "YES",
+        },
+    )
+    store.add_trade(
+        connection_id,
+        {
+            "asset": "ETH",
+            "window_start": 2222222222,
+            "market_ticker": "KXETH15M-TEST",
+            "outcome": "YES",
+            "requested_dollars": 0.10,
+            "contract_price": 0.60,
+            "contracts": 0.16,
+            "client_order_id": "close-test",
+            "status": "submitted",
+            "raw": {},
+        },
+    )
+    trade_id = store.list_trades(connection_id)[0]["id"]
+    store.settle_trade(
+        connection_id,
+        trade_id,
+        status="WIN",
+        pnl=0.05,
+        kalshi_close_price=4201.25,
+    )
+    trade = store.list_trades(connection_id)[0]
+    assert trade["kalshi_close_price"] == 4201.25
+    assert trade["predicted_price"] == 4200.50
+    assert trade["threshold"] == 4198.00
