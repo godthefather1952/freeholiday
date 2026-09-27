@@ -44,3 +44,36 @@ def test_risk_rules():
         paused=False,
     )
     assert not blocked.ok
+
+
+def test_ten_cent_minimum():
+    settings = dict(DEFAULT_SETTINGS)
+    settings["trade_size_dollars"] = 0.10
+    settings["max_trade_dollars"] = 0.10
+    settings["max_daily_exposure_dollars"] = 1.00
+    settings["max_daily_loss_dollars"] = 1.00
+    settings = validate_settings(settings)
+
+    allowed = check_trade(
+        settings=settings,
+        asset="BTC",
+        amount_dollars=0.10,
+        contract_price=0.55,
+        daily_exposure=0,
+        realized_pnl=0,
+        open_positions=0,
+        paused=False,
+    )
+    assert allowed.ok
+
+    blocked = check_trade(
+        settings=settings,
+        asset="BTC",
+        amount_dollars=0.09,
+        contract_price=0.55,
+        daily_exposure=0,
+        realized_pnl=0,
+        open_positions=0,
+        paused=False,
+    )
+    assert not blocked.ok
