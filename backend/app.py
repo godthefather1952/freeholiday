@@ -317,6 +317,7 @@ def entry_engine_analysis(
     *,
     current_price: float,
     calibration: dict[str, Any] | None = None,
+    trade_amount_dollars: float | None = None,
     now: float | None = None,
 ) -> dict[str, Any]:
     now = time.time() if now is None else now
@@ -360,24 +361,44 @@ def entry_engine_analysis(
     supplied_bias = float(forecast.forecast_error_bias_pct or 0.0)
     fallback_sigma = ENTRY_FALLBACK_SIGMA[forecast.asset]
 
+    valid_local_sigma = (
+        float(supplied_sigma)
+        if supplied_sigma is not None
+        and math.isfinite(float(supplied_sigma))
+        and float(supplied_sigma) > 0
+        and forecast.forecast_error_samples >= 5
+        else None
+    )
     if (
         calibration_samples >= 5
         and calibration_sigma is not None
         and math.isfinite(float(calibration_sigma))
         and float(calibration_sigma) > 0
     ):
-        sigma_full = float(calibration_sigma)
-        bias_full = calibration_bias
+        sigma_floor = fallback_sigma * 0.50
+        if valid_local_sigma is not None:
+            sigma_floor = max(
+                sigma_floor,
+                valid_local_sigma * 0.75,
+            )
+        sigma_full = max(
+            float(calibration_sigma),
+            sigma_floor,
+        )
+        bias_shrink = min(1.0, calibration_samples / 20.0)
+        bias_full = calibration_bias * bias_shrink
         error_source = "Kalshi settled history"
         error_samples = calibration_samples
-    elif (
-        supplied_sigma is not None
-        and math.isfinite(float(supplied_sigma))
-        and float(supplied_sigma) > 0
-        and forecast.forecast_error_samples >= 5
-    ):
-        sigma_full = float(supplied_sigma)
-        bias_full = supplied_bias
+    elif valid_local_sigma is not None:
+        sigma_full = max(
+            valid_local_sigma,
+            fallback_sigma * 0.50,
+        )
+        bias_shrink = min(
+            1.0,
+            int(forecast.forecast_error_samples) / 20.0,
+        )
+        bias_full = supplied_bias * bias_shrink
         error_source = "local settled forecast errors"
         error_samples = int(forecast.forecast_error_samples)
     else:
@@ -431,15 +452,49 @@ def entry_engine_analysis(
     )
     fee_adjusted_breakeven = None
     model_edge = None
+    estimated_contracts = None
+    estimated_entry_fee = None
+    estimated_spend = None
     if market_implied is not None:
-        fee_per_contract = (
-            0.07 * market_implied * (1.0 - market_implied)
+        amount = (
+            float(trade_amount_dollars)
+            if trade_amount_dollars is not None
+            and float(trade_amount_dollars) > 0
+            else None
         )
-        fee_adjusted_breakeven = _clamp(
-            market_implied + fee_per_contract,
-            0.001,
-            0.999,
-        )
+        if amount is not None:
+            estimated_contracts = (
+                math.floor((amount / market_implied) * 100.0)
+                / 100.0
+            )
+        if estimated_contracts is not None and estimated_contracts >= 0.01:
+            estimated_spend = (
+                estimated_contracts * market_implied
+            )
+            estimated_entry_fee = estimated_taker_fee(
+                market_implied,
+                estimated_contracts,
+            )
+            fee_adjusted_breakeven = _clamp(
+                (
+                    estimated_spend
+                    + estimated_entry_fee
+                )
+                / estimated_contracts,
+                0.001,
+                0.999,
+            )
+        else:
+            fee_per_contract = (
+                0.07
+                * market_implied
+                * (1.0 - market_implied)
+            )
+            fee_adjusted_breakeven = _clamp(
+                market_implied + fee_per_contract,
+                0.001,
+                0.999,
+            )
         model_edge = side_probability - fee_adjusted_breakeven
 
     distance_dollars = threshold - current_price
@@ -467,6 +522,9 @@ def entry_engine_analysis(
         "market_implied_probability": market_implied,
         "fee_adjusted_breakeven": fee_adjusted_breakeven,
         "model_edge": model_edge,
+        "estimated_contracts": estimated_contracts,
+        "estimated_entry_fee": estimated_entry_fee,
+        "estimated_spend": estimated_spend,
     }
 
 def opportunity_payload(
@@ -510,6 +568,9 @@ def opportunity_payload(
             "fee_adjusted_breakeven"
         ],
         "model_edge": analysis["model_edge"],
+        "estimated_contracts": analysis["estimated_contracts"],
+        "estimated_entry_fee": analysis["estimated_entry_fee"],
+        "estimated_spend": analysis["estimated_spend"],
         "expected_remaining_move_pct": analysis[
             "expected_remaining_move_pct"
         ],
@@ -580,6 +641,7 @@ async def execute_confirmed_trade(
         quote,
         current_price=underlying_price,
         calibration=calibration,
+        trade_amount_dollars=amount_dollars,
     )
     outcome = str(analysis["suggested_outcome"]).upper()
     confirmed_outcome = str(
@@ -765,11 +827,15 @@ async def opportunities(
                 conn.id,
                 forecast.asset,
             )
+            settings = store.get_settings(conn.id)
             analysis = entry_engine_analysis(
                 forecast,
                 quote,
                 current_price=current_price,
                 calibration=calibration,
+                trade_amount_dollars=float(
+                    settings["trade_size_dollars"]
+                ),
             )
             confirmation = store.confirmation(
                 conn.id,
@@ -832,11 +898,15 @@ async def decision(
         conn.id,
         req.asset,
     )
+    settings = store.get_settings(conn.id)
     analysis = entry_engine_analysis(
         forecast,
         quote,
         current_price=current_price,
         calibration=calibration,
+        trade_amount_dollars=float(
+            settings["trade_size_dollars"]
+        ),
     )
     suggested = str(analysis["suggested_outcome"])
     if suggested != req.suggested_outcome:
@@ -874,6 +944,9 @@ async def decision(
             "fee_adjusted_breakeven"
         ],
         "model_edge": analysis["model_edge"],
+        "estimated_contracts": analysis["estimated_contracts"],
+        "estimated_entry_fee": analysis["estimated_entry_fee"],
+        "estimated_spend": analysis["estimated_spend"],
         "expected_remaining_move_pct": analysis[
             "expected_remaining_move_pct"
         ],
