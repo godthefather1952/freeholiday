@@ -291,12 +291,12 @@ class KalshiClient:
         *,
         ticker: str,
         outcome: str,
-        contracts: int,
+        contracts: float,
         outcome_price: float,
         client_order_id: str | None = None,
     ) -> dict[str, Any]:
-        if contracts < 1:
-            raise KalshiError("contracts must be at least 1")
+        if contracts < 0.01:
+            raise KalshiError("contracts must be at least 0.01")
         outcome = outcome.upper()
         if outcome not in ("YES", "NO"):
             raise KalshiError("outcome must be YES or NO")
