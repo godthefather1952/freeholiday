@@ -488,6 +488,7 @@ def opportunity_payload(
         "predicted_price": forecast.predicted_price,
         "locked_price": forecast.locked_price,
         "forecast_error_sigma_pct": forecast.forecast_error_sigma_pct,
+        "forecast_error_bias_pct": forecast.forecast_error_bias_pct,
         "forecast_error_samples": forecast.forecast_error_samples,
         "market_ticker": quote.market_ticker,
         "event_ticker": quote.event_ticker,
@@ -555,9 +556,54 @@ async def execute_confirmed_trade(
             ),
         )
 
-    outcome = str(payload["suggested_outcome"]).upper()
-    current_price = quote.outcome_price(outcome)
-    if current_price is None:
+    forecast = Forecast(
+        asset=asset,
+        direction=str(payload["forecast_direction"]),
+        predicted_price=float(payload["predicted_price"]),
+        confidence=float(payload["confidence"]),
+        window_start=int(payload["window_start"]),
+        window_end=int(payload["window_end"]),
+        locked_price=payload.get("locked_price"),
+        forecast_error_sigma_pct=payload.get(
+            "forecast_error_sigma_pct"
+        ),
+        forecast_error_bias_pct=payload.get(
+            "forecast_error_bias_pct"
+        ),
+        forecast_error_samples=int(
+            payload.get("forecast_error_samples") or 0
+        ),
+    )
+    try:
+        underlying_price = await coinbase_spot(asset)
+    except KalshiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    calibration = kalshi_entry_calibration(conn.id, asset)
+    analysis = entry_engine_analysis(
+        forecast,
+        quote,
+        current_price=underlying_price,
+        calibration=calibration,
+    )
+    outcome = str(analysis["suggested_outcome"]).upper()
+    confirmed_outcome = str(
+        payload["suggested_outcome"]
+    ).upper()
+    if outcome != confirmed_outcome:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Entry Engine V2 side changed with the live market; "
+                "refresh and confirm the new side before trading"
+            ),
+        )
+    if int(analysis["remaining_seconds"]) <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail="This Kalshi 15-minute market has expired",
+        )
+    contract_price = quote.outcome_price(outcome)
+    if contract_price is None:
         raise HTTPException(
             status_code=409,
             detail="No executable Kalshi quote is available",
@@ -577,7 +623,7 @@ async def execute_confirmed_trade(
         settings=settings,
         asset=asset,
         amount_dollars=amount_dollars,
-        contract_price=current_price,
+        contract_price=contract_price,
         daily_exposure=store.daily_exposure(conn.id),
         realized_pnl=store.daily_realized_pnl(conn.id),
         open_positions=count_open_positions(positions, freeholiday_only=True),
@@ -586,13 +632,13 @@ async def execute_confirmed_trade(
     if not risk.ok:
         raise HTTPException(status_code=409, detail=risk.reason)
 
-    contracts = math.floor((amount_dollars / current_price) * 100.0) / 100.0
+    contracts = math.floor((amount_dollars / contract_price) * 100.0) / 100.0
     if contracts < 0.01:
         raise HTTPException(
             status_code=409,
             detail="Trade amount is too small for the current Kalshi price",
         )
-    actual_spend = round(contracts * current_price, 6)
+    actual_spend = round(contracts * contract_price, 6)
     if actual_spend > float(settings["max_trade_dollars"]) + 1e-9:
         raise HTTPException(
             status_code=409,
@@ -607,7 +653,7 @@ async def execute_confirmed_trade(
             ticker=quote.market_ticker,
             outcome=outcome,
             contracts=contracts,
-            outcome_price=current_price,
+            outcome_price=contract_price,
             client_order_id=client_order_id,
         )
     except (KalshiError, KalshiAuthError) as exc:
@@ -626,12 +672,15 @@ async def execute_confirmed_trade(
         "market_ticker": quote.market_ticker,
         "outcome": outcome,
         "requested_dollars": actual_spend,
-        "contract_price": current_price,
+        "contract_price": contract_price,
         "contracts": contracts,
         "client_order_id": client_order_id,
         "order_id": order_id,
         "status": status,
-        "raw": result,
+        "raw": {
+            "order_response": result,
+            "entry_analysis": analysis,
+        },
     }
     store.add_trade(conn.id, trade)
     return trade
