@@ -346,23 +346,9 @@ def entry_engine_analysis(
         full_expected_log_move = math.log(
             predicted_price / locked_price
         )
-        remaining_expected_log_move = (
-            full_expected_log_move * remaining_fraction
-        )
-        live_entry_forecast = current_price * math.exp(
-            remaining_expected_log_move
-        )
     else:
-        live_entry_forecast = math.exp(
-            math.log(current_price)
-            + remaining_fraction
-            * (math.log(predicted_price) - math.log(current_price))
-        )
         full_expected_log_move = math.log(
             predicted_price / current_price
-        )
-        remaining_expected_log_move = (
-            full_expected_log_move * remaining_fraction
         )
 
     calibration = calibration or {}
@@ -403,10 +389,20 @@ def entry_engine_analysis(
         error_source = "asset fallback"
         error_samples = 0
 
-    # Apply the historically observed full-window bias only to the
-    # remaining fraction of the current window.
-    live_entry_forecast *= math.exp(
-        bias_full * remaining_fraction
+    # Adjust the original locked forecast by observed historical bias,
+    # then blend from that target toward the live price as the clock expires.
+    # This avoids double-counting a move that has already happened.
+    bias_adjusted_prediction = predicted_price * math.exp(bias_full)
+    live_entry_forecast = math.exp(
+        math.log(current_price)
+        + remaining_fraction
+        * (
+            math.log(bias_adjusted_prediction)
+            - math.log(current_price)
+        )
+    )
+    remaining_expected_log_move = math.log(
+        live_entry_forecast / current_price
     )
 
     uncertainty_fraction = max(
