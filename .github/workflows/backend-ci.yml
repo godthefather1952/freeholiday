@@ -20,6 +20,10 @@ jobs:
           pip install pytest
       - name: Compile Python
         run: python -m py_compile backend/app.py backend/kalshi_client.py backend/store.py backend/risk.py
+      - name: Import FastAPI application
+        run: |
+          export FREEHOLIDAY_FERNET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+          PYTHONPATH=backend python -c "import app; assert app.app.title == 'FreeHoliday Kalshi API'"
       - name: Run core tests
         env:
           PYTHONPATH: backend
