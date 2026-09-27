@@ -139,7 +139,6 @@ def count_open_positions(payload: dict[str, Any]) -> int:
         values = [
             row.get("position_fp"),
             row.get("position"),
-            row.get("total_traded"),
         ]
         if any(_nonzero(v) for v in values):
             count += 1
