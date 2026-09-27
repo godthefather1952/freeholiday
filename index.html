@@ -234,7 +234,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 .kalshi-trade-meta{color:var(--muted);margin-top:3px}
 .kalshi-trade-status{font-weight:850;text-align:right}
 @media (min-width:760px){
-  .kalshi-connect-grid{grid-template-columns:1.2fr 1fr 1fr}
+  .kalshi-connect-grid{grid-template-columns:1fr 1fr}
   .kalshi-account-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
   .kalshi-opportunities{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kalshi-settings-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -409,10 +409,6 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     <div class="kalshi-body">
       <div id="kalshiDisconnected">
         <div class="kalshi-connect-grid">
-          <div class="kalshi-field">
-            <label for="kalshiApiBase">FreeHoliday API URL</label>
-            <input id="kalshiApiBase" type="url" inputmode="url" placeholder="https://your-freeholiday-api.example.com">
-          </div>
           <div class="kalshi-field">
             <label for="kalshiKeyId">Kalshi API Key ID</label>
             <input id="kalshiKeyId" type="text" autocomplete="off" placeholder="API key ID">
@@ -649,14 +645,11 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 
 
   var KALSHI_TOKEN_KEY="freeholiday_kalshi_token_v1";
-  var KALSHI_API_KEY="freeholiday_api_base_v1";
+  var KALSHI_DEFAULT_API="https://freeholiday-api.onrender.com";
   var kalshiState={token:sessionStorage.getItem(KALSHI_TOKEN_KEY)||"",account:null,settings:null,opportunities:[],busy:false,lastWindow:0};
 
   function kalshiBase(){
-    var input=document.getElementById("kalshiApiBase");
-    var saved=localStorage.getItem(KALSHI_API_KEY)||"";
-    var value=(input&&input.value.trim())||saved;
-    return value.replace(/\/$/,"");
+    return KALSHI_DEFAULT_API;
   }
 
   function setKalshiMessage(text,type){
@@ -884,15 +877,11 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
   }
 
   async function connectKalshi(){
-    var baseInput=document.getElementById("kalshiApiBase");
     var key=document.getElementById("kalshiKeyId");
     var pem=document.getElementById("kalshiPem");
     var btn=document.getElementById("kalshiConnectBtn");
-    var base=(baseInput&&baseInput.value.trim())||"";
-    if(!base){setConnectMessage("Enter the deployed FreeHoliday API URL.","error");return;}
     if(!key||!key.value.trim()){setConnectMessage("Enter your Kalshi API Key ID.","error");return;}
     if(!pem||!pem.files||!pem.files[0]){setConnectMessage("Choose your Kalshi .pem private-key file.","error");return;}
-    localStorage.setItem(KALSHI_API_KEY,base.replace(/\/$/,""));
     var form=new FormData();
     form.append("api_key_id",key.value.trim());
     form.append("private_key",pem.files[0],pem.files[0].name);
@@ -991,8 +980,6 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
   }
 
   function initKalshi(){
-    var base=document.getElementById("kalshiApiBase");
-    if(base)base.value=localStorage.getItem(KALSHI_API_KEY)||"";
     renderKalshiConnection();
     var connect=document.getElementById("kalshiConnectBtn");
     var save=document.getElementById("kalshiSaveSettingsBtn");
