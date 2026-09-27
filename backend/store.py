@@ -32,7 +32,7 @@ class StoredConnection:
 
 DEFAULT_SETTINGS = {
     "auto_trade": False,
-    "trade_size_dollars": 2.0,
+    "trade_size_dollars": 0.10,
     "max_trade_dollars": 5.0,
     "max_daily_exposure_dollars": 25.0,
     "max_daily_loss_dollars": 10.0,
@@ -104,7 +104,7 @@ class VaultStore:
                     outcome TEXT NOT NULL,
                     requested_dollars REAL NOT NULL,
                     contract_price REAL NOT NULL,
-                    contracts INTEGER NOT NULL,
+                    contracts REAL NOT NULL,
                     client_order_id TEXT NOT NULL UNIQUE,
                     order_id TEXT,
                     status TEXT NOT NULL,
