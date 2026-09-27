@@ -37,7 +37,6 @@ DEFAULT_SETTINGS = {
     "max_daily_exposure_dollars": 25.0,
     "max_daily_loss_dollars": 10.0,
     "max_open_positions": 3,
-    "max_contract_price": 0.70,
     "allowed_assets": ["BTC", "ETH", "DOGE", "NEAR"],
 }
 
