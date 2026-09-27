@@ -13,10 +13,10 @@ class RiskDecision:
 def validate_settings(settings: dict[str, Any]) -> dict[str, Any]:
     out = dict(settings)
     numeric = {
-        "trade_size_dollars": (0.25, 10000.0),
-        "max_trade_dollars": (0.25, 10000.0),
-        "max_daily_exposure_dollars": (0.25, 100000.0),
-        "max_daily_loss_dollars": (0.25, 100000.0),
+        "trade_size_dollars": (0.10, 10000.0),
+        "max_trade_dollars": (0.10, 10000.0),
+        "max_daily_exposure_dollars": (0.10, 100000.0),
+        "max_daily_loss_dollars": (0.10, 100000.0),
         "max_contract_price": (0.01, 0.99),
     }
     for key, (lo, hi) in numeric.items():
@@ -53,8 +53,8 @@ def check_trade(
         return RiskDecision(False, "Trading is paused")
     if asset.upper() not in settings.get("allowed_assets", []):
         return RiskDecision(False, f"{asset.upper()} is disabled in trading settings")
-    if amount_dollars <= 0:
-        return RiskDecision(False, "Trade amount must be positive")
+    if amount_dollars < 0.10 - 1e-9:
+        return RiskDecision(False, "Minimum trade size is $0.10")
     if amount_dollars > float(settings["max_trade_dollars"]) + 1e-9:
         return RiskDecision(False, "Trade exceeds the per-trade dollar limit")
     if daily_exposure + amount_dollars > float(settings["max_daily_exposure_dollars"]) + 1e-9:
