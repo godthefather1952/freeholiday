@@ -350,26 +350,45 @@ class VaultStore:
                 confirmation = json.loads(raw_confirmation) if raw_confirmation else {}
             except (TypeError, ValueError):
                 confirmation = {}
+            try:
+                raw_trade = json.loads(item.get("raw_json") or "{}")
+            except (TypeError, ValueError):
+                raw_trade = {}
+            entry = (
+                raw_trade.get("entry_analysis")
+                if isinstance(raw_trade, dict)
+                and isinstance(raw_trade.get("entry_analysis"), dict)
+                else {}
+            )
             item["predicted_price"] = confirmation.get("predicted_price")
             item["threshold"] = confirmation.get("threshold")
-            item["current_price_at_confirm"] = confirmation.get(
-                "current_price_at_confirm"
+            item["current_price_at_confirm"] = entry.get(
+                "current_price",
+                confirmation.get("current_price_at_confirm"),
             )
-            item["live_entry_forecast"] = confirmation.get(
-                "live_entry_forecast"
+            item["live_entry_forecast"] = entry.get(
+                "live_entry_forecast",
+                confirmation.get("live_entry_forecast"),
             )
-            item["time_remaining_seconds"] = confirmation.get(
-                "time_remaining_seconds"
+            item["time_remaining_seconds"] = entry.get(
+                "remaining_seconds",
+                confirmation.get("time_remaining_seconds"),
             )
-            item["target_probability"] = confirmation.get(
-                "target_probability"
+            item["target_probability"] = entry.get(
+                "target_probability",
+                confirmation.get("target_probability"),
             )
-            item["market_implied_probability"] = confirmation.get(
-                "market_implied_probability"
+            item["market_implied_probability"] = entry.get(
+                "market_implied_probability",
+                confirmation.get("market_implied_probability"),
             )
-            item["model_edge"] = confirmation.get("model_edge")
-            item["remaining_error_sigma_pct"] = confirmation.get(
-                "remaining_error_sigma_pct"
+            item["model_edge"] = entry.get(
+                "model_edge",
+                confirmation.get("model_edge"),
+            )
+            item["remaining_error_sigma_pct"] = entry.get(
+                "remaining_error_sigma_pct",
+                confirmation.get("remaining_error_sigma_pct"),
             )
             out.append(item)
         return out
