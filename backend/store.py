@@ -110,11 +110,55 @@ class VaultStore:
                     gross_pnl REAL,
                     raw_json TEXT,
                     created_at REAL NOT NULL,
-                    UNIQUE(connection_id, asset, window_start),
                     FOREIGN KEY(connection_id) REFERENCES connections(id) ON DELETE CASCADE
                 );
                 """
             )
+            self._migrate_trades_allow_multiple(con)
+
+    def _migrate_trades_allow_multiple(self, con: sqlite3.Connection) -> None:
+        row = con.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='trades'"
+        ).fetchone()
+        sql = str(row["sql"] or "") if row else ""
+        normalized = " ".join(sql.split()).lower()
+        if "unique(connection_id, asset, window_start)" not in normalized:
+            return
+
+        con.executescript(
+            """
+            CREATE TABLE trades_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                connection_id TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                window_start INTEGER NOT NULL,
+                market_ticker TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                requested_dollars REAL NOT NULL,
+                contract_price REAL NOT NULL,
+                contracts REAL NOT NULL,
+                client_order_id TEXT NOT NULL UNIQUE,
+                order_id TEXT,
+                status TEXT NOT NULL,
+                gross_pnl REAL,
+                raw_json TEXT,
+                created_at REAL NOT NULL,
+                FOREIGN KEY(connection_id) REFERENCES connections(id) ON DELETE CASCADE
+            );
+            INSERT INTO trades_new(
+                id,connection_id,asset,window_start,market_ticker,outcome,
+                requested_dollars,contract_price,contracts,client_order_id,
+                order_id,status,gross_pnl,raw_json,created_at
+            )
+            SELECT
+                id,connection_id,asset,window_start,market_ticker,outcome,
+                requested_dollars,contract_price,contracts,client_order_id,
+                order_id,status,gross_pnl,raw_json,created_at
+            FROM trades;
+            DROP TABLE trades;
+            ALTER TABLE trades_new RENAME TO trades;
+            """
+        )
 
     def _encrypt(self, value: str) -> bytes:
         return self.fernet.encrypt(value.encode("utf-8"))
