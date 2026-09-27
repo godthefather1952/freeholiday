@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: freeholiday-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: FREEHOLIDAY_FERNET_KEY
+        sync: false
+      - key: FREEHOLIDAY_DB
+        value: /var/data/freeholiday.db
+      - key: FREEHOLIDAY_ALLOWED_ORIGINS
+        value: https://godthefather1952.github.io
+      - key: FREEHOLIDAY_CONNECTION_TTL_HOURS
+        value: 12
+      - key: KALSHI_API_HOST
+        value: https://api.elections.kalshi.com
+    disk:
+      name: freeholiday-data
+      mountPath: /var/data
+      sizeGB: 1
