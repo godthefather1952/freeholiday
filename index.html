@@ -937,11 +937,23 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
       var predicted=Number(t.predicted_price);
       var threshold=Number(t.threshold);
       var close=Number(t.kalshi_close_price);
+      var entryCurrent=Number(t.current_price_at_confirm);
+      var entryForecast=Number(t.live_entry_forecast);
+      var entryProb=Number(t.target_probability);
+      var entryEdge=Number(t.model_edge);
+      var entryRemaining=Number(t.time_remaining_seconds);
       var analysis=
         '<div class="kalshi-trade-meta">'+
           'Predicted '+(Number.isFinite(predicted)?kalshiAssetPrice(t.asset,predicted):"—")+
           ' · Target '+(Number.isFinite(threshold)?kalshiAssetPrice(t.asset,threshold):"—")+
           ' · Kalshi close '+(Number.isFinite(close)?kalshiAssetPrice(t.asset,close):"Pending")+
+        '</div>'+
+        '<div class="kalshi-trade-meta">'+
+          'Entry spot '+(Number.isFinite(entryCurrent)?kalshiAssetPrice(t.asset,entryCurrent):"—")+
+          ' · Entry forecast '+(Number.isFinite(entryForecast)?kalshiAssetPrice(t.asset,entryForecast):"—")+
+          ' · Prob '+(Number.isFinite(entryProb)?kalshiPct(entryProb,1):"—")+
+          ' · Edge '+(Number.isFinite(entryEdge)?kalshiSignedPct(entryEdge,1):"—")+
+          ' · T−'+(Number.isFinite(entryRemaining)?kalshiDuration(entryRemaining):"—")+
         '</div>';
       return '<div class="kalshi-trade"><div><strong>'+escapeHtml(t.asset)+' · '+escapeHtml(t.outcome)+'</strong><div class="kalshi-trade-meta">'+kalshiMoney(t.requested_dollars)+' · '+kalshiPrice(t.contract_price)+' · '+escapeHtml(t.market_ticker)+' · '+d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})+pnlText+'</div>'+analysis+'</div><div class="kalshi-trade-status">'+escapeHtml(t.status)+'</div></div>';
     }).join("");
