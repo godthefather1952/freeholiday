@@ -84,7 +84,6 @@ class SettingsRequest(BaseModel):
     max_daily_exposure_dollars: float = Field(default=25.0, ge=0.10)
     max_daily_loss_dollars: float = Field(default=10.0, ge=0.10)
     max_open_positions: int = Field(default=3, ge=1)
-    max_contract_price: float = Field(default=0.70, gt=0, lt=1)
     allowed_assets: list[Literal["BTC", "ETH", "DOGE", "NEAR"]] = [
         "BTC",
         "ETH",
