@@ -352,6 +352,25 @@ class VaultStore:
                 confirmation = {}
             item["predicted_price"] = confirmation.get("predicted_price")
             item["threshold"] = confirmation.get("threshold")
+            item["current_price_at_confirm"] = confirmation.get(
+                "current_price_at_confirm"
+            )
+            item["live_entry_forecast"] = confirmation.get(
+                "live_entry_forecast"
+            )
+            item["time_remaining_seconds"] = confirmation.get(
+                "time_remaining_seconds"
+            )
+            item["target_probability"] = confirmation.get(
+                "target_probability"
+            )
+            item["market_implied_probability"] = confirmation.get(
+                "market_implied_probability"
+            )
+            item["model_edge"] = confirmation.get("model_edge")
+            item["remaining_error_sigma_pct"] = confirmation.get(
+                "remaining_error_sigma_pct"
+            )
             out.append(item)
         return out
 
