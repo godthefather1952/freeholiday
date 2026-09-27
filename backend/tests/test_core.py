@@ -3,7 +3,9 @@ from cryptography.hazmat.primitives import serialization
 
 from kalshi_client import Credentials, Signer
 from risk import check_trade, validate_settings
-from store import DEFAULT_SETTINGS
+from cryptography.fernet import Fernet
+
+from store import DEFAULT_SETTINGS, VaultStore
 
 
 def test_rsa_signer_headers():
@@ -77,3 +79,33 @@ def test_ten_cent_minimum():
         paused=False,
     )
     assert not blocked.ok
+
+
+def test_multiple_trades_same_window(tmp_path):
+    store = VaultStore(
+        str(tmp_path / "freeholiday.db"),
+        Fernet.generate_key().decode(),
+    )
+    connection_id, _ = store.create_connection(
+        "test-key",
+        "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+    )
+    base = {
+        "asset": "BTC",
+        "window_start": 1234567890,
+        "market_ticker": "TEST-BTC",
+        "outcome": "YES",
+        "requested_dollars": 0.10,
+        "contract_price": 0.50,
+        "contracts": 0.20,
+        "order_id": None,
+        "status": "submitted",
+        "raw": {},
+    }
+    first = dict(base, client_order_id="order-one")
+    second = dict(base, client_order_id="order-two")
+    store.add_trade(connection_id, first)
+    store.add_trade(connection_id, second)
+    rows = store.list_trades(connection_id)
+    assert len(rows) == 2
+    assert rows[0]["window_start"] == rows[1]["window_start"]
