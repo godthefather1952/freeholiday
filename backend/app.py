@@ -6,6 +6,7 @@ import time
 import uuid
 from typing import Any, Literal
 
+import httpx
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -54,6 +55,9 @@ class Forecast(BaseModel):
     confidence: float = Field(ge=0.5, le=1.0)
     window_start: int
     window_end: int
+    locked_price: float | None = Field(default=None, gt=0)
+    forecast_error_sigma_pct: float | None = Field(default=None, gt=0)
+    forecast_error_samples: int = Field(default=0, ge=0)
 
 
 class OpportunityRequest(BaseModel):
@@ -63,6 +67,7 @@ class OpportunityRequest(BaseModel):
 class DecisionRequest(BaseModel):
     asset: Literal["BTC", "ETH", "DOGE", "NEAR"]
     window_start: int
+    window_end: int
     decision: Literal["confirm", "skip"]
     market_ticker: str
     suggested_outcome: Literal["YES", "NO"]
@@ -70,6 +75,9 @@ class DecisionRequest(BaseModel):
     threshold: float
     confidence: float
     forecast_direction: Literal["Higher", "Lower"]
+    locked_price: float | None = Field(default=None, gt=0)
+    forecast_error_sigma_pct: float | None = Field(default=None, gt=0)
+    forecast_error_samples: int = Field(default=0, ge=0)
 
 
 class OrderRequest(BaseModel):
@@ -84,7 +92,7 @@ class SettingsRequest(BaseModel):
     max_trade_dollars: float = Field(default=5.0, ge=0.10)
     max_daily_exposure_dollars: float = Field(default=25.0, ge=0.10)
     max_daily_loss_dollars: float = Field(default=10.0, ge=0.10)
-    max_open_positions: int = Field(default=3, ge=1)
+    max_open_positions: int = Field(default=4, ge=1)
     allowed_assets: list[Literal["BTC", "ETH", "DOGE", "NEAR"]] = [
         "BTC",
         "ETH",
@@ -208,13 +216,169 @@ async def sync_trade_settlements(conn: StoredConnection, kalshi: KalshiClient) -
         )
 
 
-def opportunity_payload(
-    forecast: Forecast, quote, confirmation: dict[str, Any] | None
+COINBASE_PRODUCT_BY_ASSET = {
+    "BTC": "BTC-USD",
+    "ETH": "ETH-USD",
+    "DOGE": "DOGE-USD",
+    "NEAR": "NEAR-USD",
+}
+
+# Conservative 15-minute fallback residual volatility when there are not yet
+# enough local settled forecasts to estimate the model's own error distribution.
+ENTRY_FALLBACK_SIGMA = {
+    "BTC": 0.0035,
+    "ETH": 0.0050,
+    "DOGE": 0.0090,
+    "NEAR": 0.0080,
+}
+
+
+async def coinbase_spot(asset: str) -> float:
+    product = COINBASE_PRODUCT_BY_ASSET.get(asset.upper())
+    if not product:
+        raise KalshiError(f"Unsupported spot asset: {asset}")
+    url = f"https://api.exchange.coinbase.com/products/{product}/ticker"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(
+                url,
+                headers={"Accept": "application/json"},
+            )
+        response.raise_for_status()
+        value = float(response.json().get("price"))
+    except Exception as exc:
+        raise KalshiError(
+            f"Could not read live {asset} price for entry analysis"
+        ) from exc
+    if not math.isfinite(value) or value <= 0:
+        raise KalshiError(f"Live {asset} price is invalid")
+    return value
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+def _normal_cdf(z: float) -> float:
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+
+def entry_engine_analysis(
+    forecast: Forecast,
+    quote,
+    *,
+    current_price: float,
+    now: float | None = None,
 ) -> dict[str, Any]:
-    suggested = (
-        "YES" if forecast.predicted_price >= quote.threshold else "NO"
+    now = time.time() if now is None else now
+    total_seconds = max(
+        1.0,
+        (float(forecast.window_end) - float(forecast.window_start)) / 1000.0,
     )
-    price = quote.outcome_price(suggested)
+    remaining_seconds = _clamp(
+        (float(forecast.window_end) / 1000.0) - now,
+        0.0,
+        total_seconds,
+    )
+    remaining_fraction = remaining_seconds / total_seconds
+
+    confidence_strength = _clamp(
+        (float(forecast.confidence) - 0.5) / 0.5,
+        0.0,
+        1.0,
+    )
+    forecast_weight = remaining_fraction * (
+        0.35 + 0.65 * confidence_strength
+    )
+
+    log_current = math.log(current_price)
+    log_predicted = math.log(float(forecast.predicted_price))
+    live_entry_forecast = math.exp(
+        log_current
+        + forecast_weight * (log_predicted - log_current)
+    )
+
+    supplied_sigma = forecast.forecast_error_sigma_pct
+    fallback_sigma = ENTRY_FALLBACK_SIGMA[forecast.asset]
+    if (
+        supplied_sigma is not None
+        and math.isfinite(float(supplied_sigma))
+        and float(supplied_sigma) > 0
+        and forecast.forecast_error_samples >= 5
+    ):
+        sigma_full = float(supplied_sigma)
+        error_source = "local settled forecast errors"
+    else:
+        original_move = 0.0
+        if forecast.locked_price:
+            original_move = abs(
+                math.log(
+                    float(forecast.predicted_price)
+                    / float(forecast.locked_price)
+                )
+            )
+        sigma_full = max(
+            fallback_sigma,
+            original_move * 0.75,
+        )
+        error_source = "asset fallback"
+
+    sigma_remaining = max(
+        sigma_full * math.sqrt(max(remaining_fraction, 0.01)),
+        sigma_full * 0.10,
+        0.0001,
+    )
+    threshold = float(quote.threshold)
+    z = math.log(live_entry_forecast / threshold) / sigma_remaining
+    probability_yes = _clamp(_normal_cdf(z), 0.001, 0.999)
+    suggested_outcome = "YES" if probability_yes >= 0.5 else "NO"
+    side_probability = (
+        probability_yes
+        if suggested_outcome == "YES"
+        else 1.0 - probability_yes
+    )
+    contract_price = quote.outcome_price(suggested_outcome)
+    market_implied = (
+        float(contract_price)
+        if contract_price is not None
+        else None
+    )
+    model_edge = (
+        side_probability - market_implied
+        if market_implied is not None
+        else None
+    )
+
+    distance_dollars = threshold - current_price
+    distance_pct = (threshold / current_price) - 1.0
+
+    return {
+        "current_price": current_price,
+        "live_entry_forecast": live_entry_forecast,
+        "remaining_seconds": int(round(remaining_seconds)),
+        "remaining_fraction": remaining_fraction,
+        "forecast_weight": forecast_weight,
+        "error_sigma_pct": sigma_full,
+        "remaining_error_sigma_pct": sigma_remaining,
+        "error_source": error_source,
+        "error_samples": int(forecast.forecast_error_samples or 0),
+        "distance_to_target": distance_dollars,
+        "distance_to_target_pct": distance_pct,
+        "probability_yes": probability_yes,
+        "target_probability": side_probability,
+        "suggested_outcome": suggested_outcome,
+        "contract_price": contract_price,
+        "market_implied_probability": market_implied,
+        "model_edge": model_edge,
+    }
+
+
+def opportunity_payload(
+    forecast: Forecast,
+    quote,
+    confirmation: dict[str, Any] | None,
+    analysis: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "asset": forecast.asset,
         "window_start": forecast.window_start,
@@ -222,21 +386,36 @@ def opportunity_payload(
         "forecast_direction": forecast.direction,
         "confidence": forecast.confidence,
         "predicted_price": forecast.predicted_price,
+        "locked_price": forecast.locked_price,
+        "forecast_error_sigma_pct": forecast.forecast_error_sigma_pct,
+        "forecast_error_samples": forecast.forecast_error_samples,
         "market_ticker": quote.market_ticker,
         "event_ticker": quote.event_ticker,
         "market_title": quote.title,
         "threshold": quote.threshold,
-        "suggested_outcome": suggested,
-        "contract_price": price,
+        "suggested_outcome": analysis["suggested_outcome"],
+        "contract_price": analysis["contract_price"],
         "yes_price": quote.yes_ask,
         "no_price": quote.no_ask,
         "market_open_ts": quote.open_ts,
         "market_close_ts": quote.close_ts,
-        "distance_to_threshold": forecast.predicted_price - quote.threshold,
-        "distance_to_threshold_pct": (
-            (forecast.predicted_price / quote.threshold) - 1.0
-        )
-        * 100.0,
+        "current_price": analysis["current_price"],
+        "live_entry_forecast": analysis["live_entry_forecast"],
+        "time_remaining_seconds": analysis["remaining_seconds"],
+        "distance_to_target": analysis["distance_to_target"],
+        "distance_to_target_pct": analysis["distance_to_target_pct"],
+        "target_probability": analysis["target_probability"],
+        "probability_yes": analysis["probability_yes"],
+        "market_implied_probability": analysis[
+            "market_implied_probability"
+        ],
+        "model_edge": analysis["model_edge"],
+        "error_sigma_pct": analysis["error_sigma_pct"],
+        "remaining_error_sigma_pct": analysis[
+            "remaining_error_sigma_pct"
+        ],
+        "error_source": analysis["error_source"],
+        "error_samples": analysis["error_samples"],
         "decision": confirmation.get("decision") if confirmation else None,
     }
 
@@ -429,13 +608,24 @@ async def opportunities(
     for forecast in req.forecasts:
         try:
             quote = await kalshi.current_market(forecast.asset)
+            current_price = await coinbase_spot(forecast.asset)
+            analysis = entry_engine_analysis(
+                forecast,
+                quote,
+                current_price=current_price,
+            )
             confirmation = store.confirmation(
                 conn.id,
                 forecast.asset,
                 forecast.window_start,
             )
             out.append(
-                opportunity_payload(forecast, quote, confirmation)
+                opportunity_payload(
+                    forecast,
+                    quote,
+                    confirmation,
+                    analysis,
+                )
             )
         except (KalshiError, KalshiAuthError) as exc:
             out.append(
@@ -465,24 +655,62 @@ async def decision(
             detail="Kalshi market changed; refresh before confirming",
         )
 
-    suggested = (
-        "YES" if req.predicted_price >= quote.threshold else "NO"
+    forecast = Forecast(
+        asset=req.asset,
+        direction=req.forecast_direction,
+        predicted_price=req.predicted_price,
+        confidence=req.confidence,
+        window_start=req.window_start,
+        window_end=req.window_end,
+        locked_price=req.locked_price,
+        forecast_error_sigma_pct=req.forecast_error_sigma_pct,
+        forecast_error_samples=req.forecast_error_samples,
     )
+    try:
+        current_price = await coinbase_spot(req.asset)
+    except KalshiError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    analysis = entry_engine_analysis(
+        forecast,
+        quote,
+        current_price=current_price,
+    )
+    suggested = str(analysis["suggested_outcome"])
     if suggested != req.suggested_outcome:
         raise HTTPException(
             status_code=409,
-            detail="Suggested side changed; refresh before confirming",
+            detail=(
+                "Entry side changed with the live price; "
+                "refresh before confirming"
+            ),
         )
 
     payload = {
         "asset": req.asset,
         "window_start": req.window_start,
+        "window_end": req.window_end,
         "market_ticker": quote.market_ticker,
         "suggested_outcome": suggested,
         "predicted_price": req.predicted_price,
+        "locked_price": req.locked_price,
         "threshold": quote.threshold,
         "confidence": req.confidence,
         "forecast_direction": req.forecast_direction,
+        "forecast_error_sigma_pct": req.forecast_error_sigma_pct,
+        "forecast_error_samples": req.forecast_error_samples,
+        "current_price_at_confirm": analysis["current_price"],
+        "live_entry_forecast": analysis["live_entry_forecast"],
+        "time_remaining_seconds": analysis["remaining_seconds"],
+        "target_probability": analysis["target_probability"],
+        "probability_yes": analysis["probability_yes"],
+        "market_implied_probability": analysis[
+            "market_implied_probability"
+        ],
+        "model_edge": analysis["model_edge"],
+        "error_sigma_pct": analysis["error_sigma_pct"],
+        "remaining_error_sigma_pct": analysis[
+            "remaining_error_sigma_pct"
+        ],
         "confirmed_at": int(time.time()),
     }
     store.save_confirmation(
