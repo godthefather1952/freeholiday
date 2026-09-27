@@ -74,15 +74,15 @@ class DecisionRequest(BaseModel):
 class OrderRequest(BaseModel):
     asset: Literal["BTC", "ETH", "DOGE", "NEAR"]
     window_start: int
-    amount_dollars: float | None = Field(default=None, gt=0)
+    amount_dollars: float | None = Field(default=None, ge=0.10)
 
 
 class SettingsRequest(BaseModel):
     auto_trade: bool = False
-    trade_size_dollars: float = Field(default=2.0, gt=0)
-    max_trade_dollars: float = Field(default=5.0, gt=0)
-    max_daily_exposure_dollars: float = Field(default=25.0, gt=0)
-    max_daily_loss_dollars: float = Field(default=10.0, gt=0)
+    trade_size_dollars: float = Field(default=0.10, ge=0.10)
+    max_trade_dollars: float = Field(default=5.0, ge=0.10)
+    max_daily_exposure_dollars: float = Field(default=25.0, ge=0.10)
+    max_daily_loss_dollars: float = Field(default=10.0, ge=0.10)
     max_open_positions: int = Field(default=3, ge=1)
     max_contract_price: float = Field(default=0.70, gt=0, lt=1)
     allowed_assets: list[Literal["BTC", "ETH", "DOGE", "NEAR"]] = [
@@ -145,7 +145,7 @@ def count_open_positions(payload: dict[str, Any]) -> int:
     return count
 
 
-def estimated_taker_fee(price: float, contracts: int) -> float:
+def estimated_taker_fee(price: float, contracts: float) -> float:
     if contracts <= 0 or not (0.0 < price < 1.0):
         return 0.0
     raw = 0.07 * contracts * price * (1.0 - price)
@@ -176,7 +176,7 @@ async def sync_trade_settlements(conn: StoredConnection, kalshi: KalshiClient) -
         outcome = settled_outcome(payload)
         if not outcome:
             continue
-        contracts = int(trade["contracts"])
+        contracts = float(trade["contracts"])
         price = float(trade["contract_price"])
         fee = estimated_taker_fee(price, contracts)
         won = outcome == str(trade["outcome"]).upper()
@@ -287,16 +287,13 @@ async def execute_confirmed_trade(
     if not risk.ok:
         raise HTTPException(status_code=409, detail=risk.reason)
 
-    contracts = int(math.floor(amount_dollars / current_price))
-    if contracts < 1:
+    contracts = math.floor((amount_dollars / current_price) * 100.0) / 100.0
+    if contracts < 0.01:
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Trade amount is smaller than one contract "
-                "at the current price"
-            ),
+            detail="Trade amount is too small for the current Kalshi price",
         )
-    actual_spend = contracts * current_price
+    actual_spend = round(contracts * current_price, 6)
     if actual_spend > float(settings["max_trade_dollars"]) + 1e-9:
         raise HTTPException(
             status_code=409,
