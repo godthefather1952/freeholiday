@@ -408,6 +408,57 @@ class VaultStore:
                 ),
             )
 
+    def settled_entry_samples(
+        self,
+        connection_id: str,
+        asset: str,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        with self.conn() as con:
+            rows = con.execute(
+                """
+                SELECT
+                    t.window_start,
+                    t.kalshi_close_price,
+                    c.payload_json
+                FROM trades t
+                JOIN confirmations c
+                  ON c.connection_id=t.connection_id
+                 AND c.asset=t.asset
+                 AND c.window_start=t.window_start
+                WHERE t.connection_id=?
+                  AND t.asset=?
+                  AND t.kalshi_close_price IS NOT NULL
+                ORDER BY t.created_at DESC
+                LIMIT ?
+                """,
+                (
+                    connection_id,
+                    asset,
+                    max(1, min(limit, 500)),
+                ),
+            ).fetchall()
+
+        seen: set[int] = set()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            window_start = int(row["window_start"])
+            if window_start in seen:
+                continue
+            seen.add(window_start)
+            try:
+                payload = json.loads(row["payload_json"] or "{}")
+            except (TypeError, ValueError):
+                payload = {}
+            out.append(
+                {
+                    "window_start": window_start,
+                    "kalshi_close_price": row["kalshi_close_price"],
+                    "predicted_price": payload.get("predicted_price"),
+                }
+            )
+        return out
+
     def daily_exposure(self, connection_id: str) -> float:
         now = time.time()
         day_start = now - (now % 86400)
