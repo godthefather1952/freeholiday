@@ -108,6 +108,7 @@ class VaultStore:
                     order_id TEXT,
                     status TEXT NOT NULL,
                     gross_pnl REAL,
+                    kalshi_close_price REAL,
                     raw_json TEXT,
                     created_at REAL NOT NULL,
                     FOREIGN KEY(connection_id) REFERENCES connections(id) ON DELETE CASCADE
@@ -115,6 +116,7 @@ class VaultStore:
                 """
             )
             self._migrate_trades_allow_multiple(con)
+            self._migrate_trade_analysis_columns(con)
 
     def _migrate_trades_allow_multiple(self, con: sqlite3.Connection) -> None:
         row = con.execute(
@@ -141,6 +143,7 @@ class VaultStore:
                 order_id TEXT,
                 status TEXT NOT NULL,
                 gross_pnl REAL,
+                kalshi_close_price REAL,
                 raw_json TEXT,
                 created_at REAL NOT NULL,
                 FOREIGN KEY(connection_id) REFERENCES connections(id) ON DELETE CASCADE
@@ -159,6 +162,14 @@ class VaultStore:
             ALTER TABLE trades_new RENAME TO trades;
             """
         )
+
+    def _migrate_trade_analysis_columns(self, con: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in con.execute("PRAGMA table_info(trades)").fetchall()
+        }
+        if "kalshi_close_price" not in columns:
+            con.execute("ALTER TABLE trades ADD COLUMN kalshi_close_price REAL")
 
     def _encrypt(self, value: str) -> bytes:
         return self.fernet.encrypt(value.encode("utf-8"))
@@ -294,8 +305,8 @@ class VaultStore:
         with self.conn() as con:
             con.execute(
                 """
-                INSERT INTO trades(connection_id,asset,window_start,market_ticker,outcome,requested_dollars,contract_price,contracts,client_order_id,order_id,status,raw_json,created_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                INSERT INTO trades(connection_id,asset,window_start,market_ticker,outcome,requested_dollars,contract_price,contracts,client_order_id,order_id,status,kalshi_close_price,raw_json,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     connection_id,
@@ -309,6 +320,7 @@ class VaultStore:
                     trade["client_order_id"],
                     trade.get("order_id"),
                     trade.get("status", "submitted"),
+                    trade.get("kalshi_close_price"),
                     json.dumps(trade.get("raw") or {}),
                     time.time(),
                 ),
@@ -317,24 +329,64 @@ class VaultStore:
     def list_trades(self, connection_id: str, limit: int = 50) -> list[dict[str, Any]]:
         with self.conn() as con:
             rows = con.execute(
-                "SELECT * FROM trades WHERE connection_id=? ORDER BY created_at DESC LIMIT ?",
+                """
+                SELECT t.*, c.payload_json AS confirmation_payload
+                FROM trades t
+                LEFT JOIN confirmations c
+                  ON c.connection_id=t.connection_id
+                 AND c.asset=t.asset
+                 AND c.window_start=t.window_start
+                WHERE t.connection_id=?
+                ORDER BY t.created_at DESC
+                LIMIT ?
+                """,
                 (connection_id, max(1, min(limit, 200))),
             ).fetchall()
-        return [dict(row) for row in rows]
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            raw_confirmation = item.pop("confirmation_payload", None)
+            try:
+                confirmation = json.loads(raw_confirmation) if raw_confirmation else {}
+            except (TypeError, ValueError):
+                confirmation = {}
+            item["predicted_price"] = confirmation.get("predicted_price")
+            item["threshold"] = confirmation.get("threshold")
+            out.append(item)
+        return out
 
     def unsettled_trades(self, connection_id: str, limit: int = 50) -> list[dict[str, Any]]:
         with self.conn() as con:
             rows = con.execute(
-                "SELECT * FROM trades WHERE connection_id=? AND gross_pnl IS NULL ORDER BY created_at ASC LIMIT ?",
+                "SELECT * FROM trades WHERE connection_id=? AND (gross_pnl IS NULL OR kalshi_close_price IS NULL) ORDER BY created_at ASC LIMIT ?",
                 (connection_id, max(1, min(limit, 200))),
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def settle_trade(self, connection_id: str, trade_id: int, *, status: str, pnl: float) -> None:
+    def settle_trade(
+        self,
+        connection_id: str,
+        trade_id: int,
+        *,
+        status: str,
+        pnl: float,
+        kalshi_close_price: float | None = None,
+    ) -> None:
         with self.conn() as con:
             con.execute(
-                "UPDATE trades SET status=?, gross_pnl=? WHERE id=? AND connection_id=?",
-                (status, float(pnl), int(trade_id), connection_id),
+                """
+                UPDATE trades
+                SET status=?, gross_pnl=?,
+                    kalshi_close_price=COALESCE(?, kalshi_close_price)
+                WHERE id=? AND connection_id=?
+                """,
+                (
+                    status,
+                    float(pnl),
+                    kalshi_close_price,
+                    int(trade_id),
+                    connection_id,
+                ),
             )
 
     def daily_exposure(self, connection_id: str) -> float:
