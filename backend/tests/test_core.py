@@ -109,3 +109,20 @@ def test_multiple_trades_same_window(tmp_path):
     rows = store.list_trades(connection_id)
     assert len(rows) == 2
     assert rows[0]["window_start"] == rows[1]["window_start"]
+
+
+def test_default_supports_four_open_markets():
+    settings = validate_settings(dict(DEFAULT_SETTINGS))
+    assert settings["max_open_positions"] >= 4
+
+    allowed = check_trade(
+        settings=settings,
+        asset="NEAR",
+        amount_dollars=0.10,
+        contract_price=0.55,
+        daily_exposure=0,
+        realized_pnl=0,
+        open_positions=3,
+        paused=False,
+    )
+    assert allowed.ok
