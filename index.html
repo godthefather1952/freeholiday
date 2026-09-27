@@ -441,10 +441,10 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
             <input id="kalshiAutoTrade" type="checkbox">
           </div>
           <div class="kalshi-settings-grid">
-            <div class="kalshi-field"><label for="kalshiTradeSize">Trade size $</label><input id="kalshiTradeSize" type="number" min=".25" step=".25"></div>
-            <div class="kalshi-field"><label for="kalshiMaxTrade">Max per trade $</label><input id="kalshiMaxTrade" type="number" min=".25" step=".25"></div>
-            <div class="kalshi-field"><label for="kalshiDailyExposure">Max daily exposure $</label><input id="kalshiDailyExposure" type="number" min=".25" step=".25"></div>
-            <div class="kalshi-field"><label for="kalshiDailyLoss">Daily loss stop $</label><input id="kalshiDailyLoss" type="number" min=".25" step=".25"></div>
+            <div class="kalshi-field"><label for="kalshiTradeSize">Trade size $</label><input id="kalshiTradeSize" type="number" min=".10" step=".10"></div>
+            <div class="kalshi-field"><label for="kalshiMaxTrade">Max per trade $</label><input id="kalshiMaxTrade" type="number" min=".10" step=".10"></div>
+            <div class="kalshi-field"><label for="kalshiDailyExposure">Max daily exposure $</label><input id="kalshiDailyExposure" type="number" min=".10" step=".10"></div>
+            <div class="kalshi-field"><label for="kalshiDailyLoss">Daily loss stop $</label><input id="kalshiDailyLoss" type="number" min=".10" step=".10"></div>
             <div class="kalshi-field"><label for="kalshiMaxPositions">Max open positions</label><input id="kalshiMaxPositions" type="number" min="1" step="1"></div>
             <div class="kalshi-field"><label for="kalshiMaxPrice">Max contract price</label><input id="kalshiMaxPrice" type="number" min=".01" max=".99" step=".01"></div>
           </div>
@@ -457,7 +457,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
           <div class="kalshi-actions">
             <button class="kalshi-btn" type="button" id="kalshiSaveSettingsBtn">Save Guardrails</button>
           </div>
-          <div class="kalshi-help">Confidence is informational only. Auto Trade is not gated by a confidence threshold. A trade becomes eligible only after you review the Kalshi target and press Confirm for that specific coin/window.</div>
+          <div class="kalshi-help">Confidence is informational only. Auto Trade is not gated by a confidence threshold. A trade becomes eligible only after you review the Kalshi target and press Confirm for that specific coin/window. Minimum trade size: $0.10.</div>
         </div>
 
         <div class="kalshi-block">
@@ -805,7 +805,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
       var decisionText=decision==="confirm"?"CONFIRMED":decision==="skip"?"SKIPPED":"AWAITING YOUR DECISION";
       var decisionClass=decision==="confirm"?"confirm":decision==="skip"?"skip":"";
       var auto=kalshiState.settings&&kalshiState.settings.auto_trade;
-      var tradeSize=kalshiState.settings?Number(kalshiState.settings.trade_size_dollars):2;
+      var tradeSize=kalshiState.settings?Number(kalshiState.settings.trade_size_dollars):0.10;
       return '<div class="kalshi-opportunity" data-op-asset="'+op.asset+'" data-op-window="'+op.window_start+'">'+
         '<div class="kalshi-op-head"><div class="kalshi-op-asset">'+op.asset+'</div><div class="kalshi-op-side '+op.suggested_outcome+'">'+op.suggested_outcome+'</div></div>'+
         '<div class="kalshi-op-grid">'+
