@@ -226,6 +226,9 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
 .kalshi-op-metric span{display:block;font-size:8px;color:var(--muted);text-transform:uppercase;font-weight:800}
 .kalshi-op-metric strong{display:block;font-size:12px;margin-top:4px;font-variant-numeric:tabular-nums}
 .kalshi-op-note{font-size:9px;color:var(--muted);line-height:1.4;margin-top:8px}
+.kalshi-edge.positive{color:var(--up)}
+.kalshi-edge.negative{color:var(--down)}
+.kalshi-edge.neutral{color:#f4c35d}
 .kalshi-decision{font-size:9px;font-weight:850;margin-top:8px}
 .kalshi-decision.confirm{color:var(--up)}
 .kalshi-decision.skip{color:#f4c35d}
@@ -727,6 +730,42 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     }
   }
 
+  function kalshiMedian(values){
+    if(!values.length)return 0;
+    var a=values.slice().sort(function(x,y){return x-y;});
+    var mid=Math.floor(a.length/2);
+    return a.length%2?a[mid]:(a[mid-1]+a[mid])/2;
+  }
+
+  function localForecastErrorStats(rows){
+    var errors=[];
+    (rows||[]).forEach(function(r){
+      var predicted=Number(r.predictedPrice);
+      var actuals=[r.closePrice,r.actualPrice,r.actualClose];
+      var actual=null;
+      for(var i=0;i<actuals.length;i++){
+        var candidate=Number(actuals[i]);
+        if(Number.isFinite(candidate)&&candidate>0){actual=candidate;break;}
+      }
+      if(Number.isFinite(predicted)&&predicted>0&&actual){
+        var e=Math.log(actual/predicted);
+        if(Number.isFinite(e))errors.push(e);
+      }
+    });
+    if(!errors.length)return {sigma:null,bias:0,samples:0};
+    var bias=kalshiMedian(errors);
+    var deviations=errors.map(function(e){return Math.abs(e-bias);});
+    var madSigma=1.4826*kalshiMedian(deviations);
+    var sq=errors.reduce(function(sum,e){var d=e-bias;return sum+d*d;},0)/errors.length;
+    var rmsSigma=Math.sqrt(Math.max(0,sq));
+    var sigma=Math.max(madSigma,rmsSigma,0.0001);
+    return {
+      sigma:Math.min(sigma,0.25),
+      bias:Math.max(-0.10,Math.min(0.10,bias)),
+      samples:errors.length
+    };
+  }
+
   function currentForecasts(){
     var start=Math.floor(Date.now()/(15*60*1000))*(15*60*1000);
     var specs=[
@@ -745,9 +784,22 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
         var direction=String(row.direction||"");
         var confidence=Number(row.confidence);
         var predicted=Number(row.predictedPrice);
+        var locked=Number(row.lockedPrice);
         var end=Number(row.end)||start+15*60*1000;
+        var stats=localForecastErrorStats(rows);
         if((direction!=="Higher"&&direction!=="Lower")||!Number.isFinite(confidence)||!Number.isFinite(predicted))return;
-        out.push({asset:spec[0],direction:direction,predicted_price:predicted,confidence:confidence,window_start:start,window_end:end});
+        out.push({
+          asset:spec[0],
+          direction:direction,
+          predicted_price:predicted,
+          confidence:confidence,
+          window_start:start,
+          window_end:end,
+          locked_price:Number.isFinite(locked)&&locked>0?locked:null,
+          forecast_error_sigma_pct:stats.sigma,
+          forecast_error_bias_pct:stats.bias,
+          forecast_error_samples:stats.samples
+        });
       }catch(ignore){}
     });
     return out;
@@ -805,6 +857,25 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     if(a.settings)applyKalshiSettings(a.settings);
   }
 
+  function kalshiPct(value,digits){
+    var n=Number(value);
+    return Number.isFinite(n)?(n*100).toFixed(digits==null?1:digits)+"%":"—";
+  }
+
+  function kalshiSignedPct(value,digits){
+    var n=Number(value);
+    if(!Number.isFinite(n))return "—";
+    var pct=n*100;
+    return (pct>=0?"+":"")+pct.toFixed(digits==null?2:digits)+"%";
+  }
+
+  function kalshiDuration(seconds){
+    var s=Math.max(0,Math.round(Number(seconds)||0));
+    var m=Math.floor(s/60);
+    var r=s%60;
+    return m+":"+String(r).padStart(2,"0");
+  }
+
   function renderKalshiOpportunities(){
     var wrap=document.getElementById("kalshiOpportunities");
     if(!wrap)return;
@@ -819,15 +890,29 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
       var decisionClass=decision==="confirm"?"confirm":decision==="skip"?"skip":"";
       var auto=kalshiState.settings&&kalshiState.settings.auto_trade;
       var tradeSize=kalshiState.settings?Number(kalshiState.settings.trade_size_dollars):0.10;
+      var edge=Number(op.model_edge);
+      var edgeClass=!Number.isFinite(edge)?"neutral":edge>0.02?"positive":edge<-0.02?"negative":"neutral";
+      var distance=Number(op.distance_to_target_pct);
+      var errorBand=Number(op.remaining_error_sigma_pct);
+      var source=String(op.error_source||"");
+      var samples=Number(op.error_samples)||0;
       return '<div class="kalshi-opportunity" data-op-asset="'+op.asset+'" data-op-window="'+op.window_start+'">'+
-        '<div class="kalshi-op-head"><div class="kalshi-op-asset">'+op.asset+'</div><div class="kalshi-op-side '+op.suggested_outcome+'">'+op.suggested_outcome+'</div></div>'+
+        '<div class="kalshi-op-head"><div><div class="kalshi-op-asset">'+op.asset+'</div><div class="kalshi-op-note" style="margin-top:2px">Entry Engine V2</div></div><div class="kalshi-op-side '+op.suggested_outcome+'">'+op.suggested_outcome+'</div></div>'+
         '<div class="kalshi-op-grid">'+
-          '<div class="kalshi-op-metric"><span>FreeHoliday</span><strong>'+op.forecast_direction+' '+(Number(op.confidence)*100).toFixed(1)+'%</strong></div>'+
-          '<div class="kalshi-op-metric"><span>Predicted close</span><strong>'+kalshiAssetPrice(op.asset,op.predicted_price)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>Current price</span><strong>'+kalshiAssetPrice(op.asset,op.current_price)+'</strong></div>'+
           '<div class="kalshi-op-metric"><span>Kalshi target</span><strong>'+kalshiAssetPrice(op.asset,op.threshold)+'</strong></div>'+
-          '<div class="kalshi-op-metric"><span>'+op.suggested_outcome+' price</span><strong>'+kalshiPrice(op.contract_price)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>Distance required</span><strong>'+kalshiSignedPct(distance,3)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>Time remaining</span><strong>'+kalshiDuration(op.time_remaining_seconds)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>Original prediction</span><strong>'+kalshiAssetPrice(op.asset,op.predicted_price)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>Live entry forecast</span><strong>'+kalshiAssetPrice(op.asset,op.live_entry_forecast)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>'+op.suggested_outcome+' target probability</span><strong>'+kalshiPct(op.target_probability,1)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>'+op.suggested_outcome+' contract price</span><strong>'+kalshiPrice(op.contract_price)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>Market implied</span><strong>'+kalshiPct(op.market_implied_probability,1)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>Fee-adjusted break-even</span><strong>'+kalshiPct(op.fee_adjusted_breakeven,1)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>Model edge</span><strong class="kalshi-edge '+edgeClass+'">'+kalshiSignedPct(op.model_edge,1)+'</strong></div>'+
+          '<div class="kalshi-op-metric"><span>Remaining error band</span><strong>±'+kalshiPct(errorBand,2)+'</strong></div>'+
         '</div>'+
-        '<div class="kalshi-op-note">Proposed Kalshi side comes from predicted close vs Kalshi target. Kalshi settles using its own reference index.</div>'+
+        '<div class="kalshi-op-note">Original model: '+escapeHtml(op.forecast_direction)+' '+kalshiPct(op.confidence,1)+' · Calibration: '+escapeHtml(source)+(samples?' ('+samples+' windows)':'')+'. Entry probability updates every 15 seconds using live price, Kalshi target, time remaining, and historical forecast error.</div>'+
         '<div class="kalshi-decision '+decisionClass+'">'+decisionText+'</div>'+
         '<div class="kalshi-actions">'+
           '<button class="kalshi-btn good" data-kalshi-action="confirm" data-asset="'+op.asset+'" data-window="'+op.window_start+'">Confirm '+op.asset+'</button>'+
@@ -951,10 +1036,20 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     var op=findOpportunity(asset,windowStart);
     if(!op||op.error)return;
     var payload={
-      asset:op.asset,window_start:Number(op.window_start),decision:decision,
-      market_ticker:op.market_ticker,suggested_outcome:op.suggested_outcome,
-      predicted_price:Number(op.predicted_price),threshold:Number(op.threshold),
-      confidence:Number(op.confidence),forecast_direction:op.forecast_direction
+      asset:op.asset,
+      window_start:Number(op.window_start),
+      window_end:Number(op.window_end),
+      decision:decision,
+      market_ticker:op.market_ticker,
+      suggested_outcome:op.suggested_outcome,
+      predicted_price:Number(op.predicted_price),
+      threshold:Number(op.threshold),
+      confidence:Number(op.confidence),
+      forecast_direction:op.forecast_direction,
+      locked_price:Number.isFinite(Number(op.locked_price))?Number(op.locked_price):null,
+      forecast_error_sigma_pct:Number.isFinite(Number(op.forecast_error_sigma_pct))?Number(op.forecast_error_sigma_pct):null,
+      forecast_error_bias_pct:Number.isFinite(Number(op.forecast_error_bias_pct))?Number(op.forecast_error_bias_pct):null,
+      forecast_error_samples:Number(op.forecast_error_samples)||0
     };
     try{
       setKalshiMessage(decision==="confirm"?"Confirming "+asset+"…":"Skipping "+asset+"…","");
