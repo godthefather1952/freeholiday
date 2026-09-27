@@ -157,6 +157,18 @@ def estimated_taker_fee(price: float, contracts: float) -> float:
     return math.ceil(raw * 100.0) / 100.0
 
 
+def kalshi_expiration_value(payload: dict[str, Any]) -> float | None:
+    market = payload.get("market") if isinstance(payload.get("market"), dict) else payload
+    raw = market.get("expiration_value")
+    if raw is None:
+        return None
+    try:
+        value = float(str(raw).replace("$", "").replace(",", "").strip())
+        return value if math.isfinite(value) else None
+    except (TypeError, ValueError):
+        return None
+
+
 def settled_outcome(payload: dict[str, Any]) -> str | None:
     market = payload.get("market") if isinstance(payload.get("market"), dict) else payload
     raw = str(
@@ -181,6 +193,7 @@ async def sync_trade_settlements(conn: StoredConnection, kalshi: KalshiClient) -
         outcome = settled_outcome(payload)
         if not outcome:
             continue
+        close_price = kalshi_expiration_value(payload)
         contracts = float(trade["contracts"])
         price = float(trade["contract_price"])
         fee = estimated_taker_fee(price, contracts)
@@ -191,6 +204,7 @@ async def sync_trade_settlements(conn: StoredConnection, kalshi: KalshiClient) -
             int(trade["id"]),
             status="WIN" if won else "LOSS",
             pnl=pnl,
+            kalshi_close_price=close_price,
         )
 
 
