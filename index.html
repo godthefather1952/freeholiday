@@ -469,7 +469,7 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
         </div>
 
         <div class="kalshi-block">
-          <div class="kalshi-block-title">Trade History</div>
+          <div class="kalshi-block-title">Trade History & Kalshi Closes</div>
           <div class="kalshi-trades" id="kalshiTrades"><div class="kalshi-message">No FreeHoliday Kalshi trades yet.</div></div>
         </div>
 
@@ -849,7 +849,16 @@ h1{font-size:28px;line-height:1;letter-spacing:-.045em;margin:7px 0 0}
     wrap.innerHTML=rows.map(function(t){
       var d=new Date(Number(t.created_at)*1000);
       var pnlText=Number.isFinite(Number(t.gross_pnl))?" · P/L "+kalshiMoney(t.gross_pnl):"";
-      return '<div class="kalshi-trade"><div><strong>'+escapeHtml(t.asset)+' · '+escapeHtml(t.outcome)+'</strong><div class="kalshi-trade-meta">'+kalshiMoney(t.requested_dollars)+' · '+kalshiPrice(t.contract_price)+' · '+escapeHtml(t.market_ticker)+' · '+d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})+pnlText+'</div></div><div class="kalshi-trade-status">'+escapeHtml(t.status)+'</div></div>';
+      var predicted=Number(t.predicted_price);
+      var threshold=Number(t.threshold);
+      var close=Number(t.kalshi_close_price);
+      var analysis=
+        '<div class="kalshi-trade-meta">'+
+          'Predicted '+(Number.isFinite(predicted)?kalshiAssetPrice(t.asset,predicted):"—")+
+          ' · Target '+(Number.isFinite(threshold)?kalshiAssetPrice(t.asset,threshold):"—")+
+          ' · Kalshi close '+(Number.isFinite(close)?kalshiAssetPrice(t.asset,close):"Pending")+
+        '</div>';
+      return '<div class="kalshi-trade"><div><strong>'+escapeHtml(t.asset)+' · '+escapeHtml(t.outcome)+'</strong><div class="kalshi-trade-meta">'+kalshiMoney(t.requested_dollars)+' · '+kalshiPrice(t.contract_price)+' · '+escapeHtml(t.market_ticker)+' · '+d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})+pnlText+'</div>'+analysis+'</div><div class="kalshi-trade-status">'+escapeHtml(t.status)+'</div></div>';
     }).join("");
   }
 
