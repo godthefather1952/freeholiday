@@ -234,12 +234,6 @@ async def execute_confirmed_trade(
             status_code=409,
             detail="This coin/window has not been confirmed",
         )
-    if store.existing_trade(conn.id, asset, window_start):
-        raise HTTPException(
-            status_code=409,
-            detail="A trade already exists for this coin/window",
-        )
-
     payload = confirmation["payload"]
     kalshi = client_for(conn)
     try:
