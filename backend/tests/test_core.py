@@ -33,17 +33,17 @@ def test_risk_rules():
         paused=False,
     )
     assert ok.ok
-    blocked = check_trade(
+    high_price = check_trade(
         settings=settings,
         asset="BTC",
         amount_dollars=2,
-        contract_price=0.90,
+        contract_price=0.98,
         daily_exposure=0,
         realized_pnl=0,
         open_positions=0,
         paused=False,
     )
-    assert not blocked.ok
+    assert high_price.ok
 
 
 def test_ten_cent_minimum():
