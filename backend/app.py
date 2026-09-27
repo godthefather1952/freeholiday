@@ -16,6 +16,7 @@ from kalshi_client import (
     KalshiAuthError,
     KalshiClient,
     KalshiError,
+    SERIES_BY_ASSET,
     verify_credentials,
 )
 from risk import check_trade, validate_settings
@@ -131,10 +132,15 @@ def _nonzero(value: Any) -> bool:
         return False
 
 
-def count_open_positions(payload: dict[str, Any]) -> int:
+def count_open_positions(payload: dict[str, Any], *, freeholiday_only: bool = False) -> int:
     rows = payload.get("market_positions") or payload.get("positions") or []
+    prefixes = tuple(f"{series}-" for series in SERIES_BY_ASSET.values())
     count = 0
     for row in rows:
+        if freeholiday_only:
+            ticker = str(row.get("ticker") or row.get("market_ticker") or "")
+            if not ticker.startswith(prefixes):
+                continue
         values = [
             row.get("position_fp"),
             row.get("position"),
@@ -274,7 +280,7 @@ async def execute_confirmed_trade(
         contract_price=current_price,
         daily_exposure=store.daily_exposure(conn.id),
         realized_pnl=store.daily_realized_pnl(conn.id),
-        open_positions=count_open_positions(positions),
+        open_positions=count_open_positions(positions, freeholiday_only=True),
         paused=conn.paused,
     )
     if not risk.ok:
@@ -392,7 +398,8 @@ async def account(conn: StoredConnection = Depends(connection)):
         "paused": conn.paused,
         "expires_at": conn.expires_at,
         "balance_dollars": dollars_from_balance(balance),
-        "open_positions": count_open_positions(positions),
+        "open_positions": count_open_positions(positions, freeholiday_only=True),
+        "kalshi_open_positions": count_open_positions(positions),
         "today_pnl": store.daily_realized_pnl(conn.id),
         "settings": store.get_settings(conn.id),
     }
