@@ -242,3 +242,47 @@ def test_entry_v2_respects_late_window_live_price():
 
     assert analysis["live_entry_forecast"] < 100.0
     assert analysis["suggested_outcome"] == "NO"
+
+
+def test_settled_entry_samples_deduplicate_windows(tmp_path):
+    store = VaultStore(
+        str(tmp_path / "entry.db"),
+        Fernet.generate_key().decode(),
+    )
+    connection_id, _ = store.create_connection(
+        "test-key",
+        "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n",
+    )
+    store.save_confirmation(
+        connection_id,
+        asset="BTC",
+        window_start=111,
+        market_ticker="KXBTC15M-TEST",
+        decision="confirm",
+        payload={"predicted_price": 100.0, "threshold": 99.0},
+    )
+    base = {
+        "asset": "BTC",
+        "window_start": 111,
+        "market_ticker": "KXBTC15M-TEST",
+        "outcome": "YES",
+        "requested_dollars": 0.10,
+        "contract_price": 0.50,
+        "contracts": 0.20,
+        "status": "submitted",
+        "raw": {},
+    }
+    store.add_trade(connection_id, dict(base, client_order_id="one"))
+    store.add_trade(connection_id, dict(base, client_order_id="two"))
+    for row in store.list_trades(connection_id):
+        store.settle_trade(
+            connection_id,
+            row["id"],
+            status="WIN",
+            pnl=0.05,
+            kalshi_close_price=101.0,
+        )
+    samples = store.settled_entry_samples(connection_id, "BTC")
+    assert len(samples) == 1
+    assert samples[0]["predicted_price"] == 100.0
+    assert samples[0]["kalshi_close_price"] == 101.0
