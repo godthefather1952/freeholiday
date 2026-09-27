@@ -36,7 +36,7 @@ DEFAULT_SETTINGS = {
     "max_trade_dollars": 5.0,
     "max_daily_exposure_dollars": 25.0,
     "max_daily_loss_dollars": 10.0,
-    "max_open_positions": 3,
+    "max_open_positions": 4,
     "allowed_assets": ["BTC", "ETH", "DOGE", "NEAR"],
 }
 
@@ -226,6 +226,9 @@ class VaultStore:
         data = json.loads(row["settings_json"])
         merged = dict(DEFAULT_SETTINGS)
         merged.update(data)
+        # v2 default: four supported assets can be open together.
+        if data.get("max_open_positions") == 3:
+            merged["max_open_positions"] = 4
         return merged
 
     def save_settings(self, connection_id: str, settings: dict[str, Any]) -> dict[str, Any]:
